@@ -1,0 +1,195 @@
+import { tAxis, tCat, tPreset } from './i18n';
+
+export interface AxisDef {
+  id: string;
+  source: string;
+  /** Use getAxisLabel() for display; this is the English fallback */
+  label: string;
+  scale: 'log' | 'linear' | 'year';
+}
+
+/** Minimum number of non-null data points required to show an axis in the dropdown */
+export const AXIS_MIN_POINTS = 10;
+
+export interface Preset {
+  id: string;
+  x: string;
+  y: string;
+  color: string;
+  categories: string[];
+  /** Use getPresetPurpose() for display; this is the English fallback */
+  purpose: string;
+}
+
+export const AXES: AxisDef[] = [
+  // Price / time
+  { id: 'price_anchor_usd', source: "coalesce(street_price_usd, msrp_usd)", label: 'Price (USD)', scale: 'log' },
+  { id: 'msrp_usd', source: 'msrp_usd', label: 'MSRP', scale: 'log' },
+  { id: 'release_year', source: 'release_year', label: 'Release Year', scale: 'year' },
+  // Perf
+  { id: 'perf_sinad_db', source: 'perf_sinad_db', label: 'SINAD (dB)', scale: 'linear' },
+  { id: 'perf_snr_db', source: 'perf_snr_db', label: 'SNR (dB)', scale: 'linear' },
+  { id: 'perf_thd_percent', source: 'perf_thd_percent', label: 'THD (%)', scale: 'log' },
+  { id: 'perf_dynamic_range_db', source: 'perf_dynamic_range_db', label: 'Dynamic Range (dB)', scale: 'linear' },
+  { id: 'perf_crosstalk_db', source: 'perf_crosstalk_db', label: 'Crosstalk (dB)', scale: 'linear' },
+  // Spec / Driveability
+  { id: 'spec_impedance_ohm', source: 'spec_impedance_ohm', label: 'Impedance (Ω)', scale: 'log' },
+  { id: 'sensitivity_proxy_db', source: 'sensitivity_proxy_db', label: 'Sensitivity Proxy (dB)', scale: 'linear' },
+  { id: 'driveability_index', source: 'driveability_index', label: 'Driveability', scale: 'linear' },
+  { id: 'spec_weight_g', source: 'spec_weight_g', label: 'Weight (g)', scale: 'log' },
+  { id: 'driver_total_count', source: 'driver_total_count', label: 'Driver Count', scale: 'linear' },
+  { id: 'spec_freq_low_hz', source: 'spec_freq_low_hz', label: 'Freq Low (Hz)', scale: 'log' },
+  { id: 'spec_freq_high_hz', source: 'spec_freq_high_hz', label: 'Freq High (Hz)', scale: 'log' },
+];
+
+export const PRESETS: Preset[] = [
+  // DAC / amp
+  { id: 'msrp_vs_sinad', x: 'price_anchor_usd', y: 'perf_sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs measured quality' },
+  { id: 'msrp_vs_thd', x: 'price_anchor_usd', y: 'perf_thd_percent', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs distortion' },
+  { id: 'thd_vs_sinad', x: 'perf_thd_percent', y: 'perf_sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Correlation between perf metrics' },
+  { id: 'release_vs_sinad', x: 'release_year', y: 'perf_sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Technology evolution' },
+  // Headphone / IEM
+  { id: 'impedance_vs_sensitivity', x: 'spec_impedance_ohm', y: 'sensitivity_proxy_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Driveability overview' },
+  { id: 'msrp_vs_driveability', x: 'price_anchor_usd', y: 'driveability_index', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs driveability' },
+  { id: 'release_vs_driveability', x: 'release_year', y: 'driveability_index', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Era vs driveability' },
+  { id: 'msrp_vs_weight', x: 'price_anchor_usd', y: 'spec_weight_g', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs physical weight' },
+  // Frequency range
+  { id: 'msrp_vs_freq_range', x: 'spec_freq_low_hz', y: 'spec_freq_high_hz', color: 'brand_name_en', categories: ['headphone', 'iem', 'speaker'], purpose: 'Frequency range overview' },
+];
+
+/** Get localized axis label */
+export function getAxisLabel(axis: AxisDef): string {
+  return tAxis(axis.id);
+}
+
+/** Get localized preset purpose */
+export function getPresetPurpose(preset: Preset): string {
+  return tPreset(preset.id);
+}
+
+/** Get localized category label */
+export function getCategoryLabel(key: string): string {
+  return tCat(key);
+}
+
+export function getAxis(id: string): AxisDef | undefined {
+  return AXES.find((a) => a.id === id);
+}
+
+/**
+ * Return axes that have at least AXIS_MIN_POINTS non-null data points
+ * across the given categories. Requires a query function to check the DB.
+ */
+export async function getAxesForCategories(
+  cats: string[],
+  queryFn: <T>(sql: string, params?: unknown[]) => Promise<T[]>,
+): Promise<AxisDef[]> {
+  const catPlaceholders = cats.map(() => '?').join(',');
+  const countExprs = AXES.map(
+    (a) => `SUM(CASE WHEN ${a.source} IS NOT NULL THEN 1 ELSE 0 END) as "${a.id}"`,
+  ).join(',\n    ');
+
+  const sql = `
+    SELECT ${countExprs}
+    FROM web_product_core
+    WHERE category_primary IN (${catPlaceholders})
+  `;
+  const rows = await queryFn<Record<string, number>>(sql, cats);
+  if (!rows.length) return [];
+
+  const counts = rows[0];
+  return AXES.filter((a) => (counts[a.id] ?? 0) >= AXIS_MIN_POINTS);
+}
+
+/** Axis IDs that are universal (price/time) — not "performance" metrics */
+const UNIVERSAL_AXIS_IDS = new Set(['price_anchor_usd', 'msrp_usd', 'release_year']);
+
+/** Performance/spec axes only (excludes price & time) */
+const METRIC_AXES = AXES.filter((a) => !UNIVERSAL_AXIS_IDS.has(a.id));
+
+/** All category keys */
+export const CATEGORY_KEYS = [
+  'headphone', 'iem', 'dac', 'headphone_amp',
+  'speaker', 'speaker_amp', 'mic', 'usb_interface',
+];
+
+/**
+ * Return categories that have at least one performance/spec axis
+ * with >= AXIS_MIN_POINTS non-null data points.
+ */
+export async function getValidCategories(
+  queryFn: <T>(sql: string, params?: unknown[]) => Promise<T[]>,
+): Promise<string[]> {
+  const countExprs = METRIC_AXES.map(
+    (a) => `SUM(CASE WHEN ${a.source} IS NOT NULL THEN 1 ELSE 0 END) as "${a.id}"`,
+  ).join(',\n    ');
+
+  const sql = `
+    SELECT category_primary, ${countExprs}
+    FROM web_product_core
+    GROUP BY category_primary
+  `;
+  const rows = await queryFn<Record<string, unknown>>(sql);
+
+  const valid: string[] = [];
+  for (const row of rows) {
+    const cat = row.category_primary as string;
+    if (!CATEGORY_KEYS.includes(cat)) continue;
+    const hasMetric = METRIC_AXES.some(
+      (a) => ((row[a.id] as number) ?? 0) >= AXIS_MIN_POINTS,
+    );
+    if (hasMetric) valid.push(cat);
+  }
+
+  // Preserve display order
+  return CATEGORY_KEYS.filter((c) => valid.includes(c));
+}
+
+/**
+ * Get the scale type for a given field key.
+ * Returns 'log' | 'linear' | 'year' based on AXES definition.
+ */
+export function getScaleForField(key: string): 'log' | 'linear' | 'year' {
+  const axis = AXES.find((a) => a.id === key);
+  return axis?.scale ?? 'linear';
+}
+
+/**
+ * Compute bar width percentage (0–100) for a value within a min/max range,
+ * respecting the field's scale type (log or linear).
+ */
+export function computeBarPercent(value: number, min: number, max: number, scale: 'log' | 'linear' | 'year'): number {
+  if (min === max) return 50;
+  if (scale === 'log') {
+    // For log scale, both min and max must be positive
+    const safeMin = Math.max(min, 1e-10);
+    const safeMax = Math.max(max, 1e-10);
+    const safeVal = Math.max(value, 1e-10);
+    const logMin = Math.log(safeMin);
+    const logMax = Math.log(safeMax);
+    if (logMin === logMax) return 50;
+    return Math.max(0, Math.min(100, ((Math.log(safeVal) - logMin) / (logMax - logMin)) * 100));
+  }
+  return Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+}
+
+export function getPresetsForCategories(cats: string[]): Preset[] {
+  return PRESETS.filter((p) =>
+    p.categories.includes('all') || p.categories.some((c) => cats.includes(c)),
+  );
+}
+
+/**
+ * @deprecated Use getCategoryLabel() instead for i18n support.
+ * Kept for backward compatibility during transition.
+ */
+export const CATEGORY_LABELS: Record<string, string> = {
+  headphone: 'Headphone',
+  iem: 'IEM',
+  dac: 'DAC',
+  headphone_amp: 'Headphone Amp',
+  speaker: 'Speaker',
+  speaker_amp: 'Speaker Amp',
+  mic: 'Microphone',
+  usb_interface: 'USB Interface',
+};

@@ -1,0 +1,507 @@
+export type Locale = 'en' | 'ja';
+
+const STORAGE_KEY = 'audiospecs-locale';
+
+let currentLocale: Locale = 'en';
+let onChangeCallbacks: Array<() => void> = [];
+
+const translations: Record<Locale, Record<string, string>> = {
+  en: {
+    // Page title
+    'page.title': 'Frieve - AudioSpecs — Audio Equipment Database',
+
+    // Nav
+    'nav.logo': 'Frieve - AudioSpecs',
+    'nav.home': 'Home',
+    'nav.analysis': 'Analysis',
+    'nav.explore': 'Explore',
+    'nav.compare': 'Compare',
+    'nav.about': 'About',
+
+    // Common
+    'common.loading': 'Loading…',
+    'common.loading_database': 'Loading database…',
+    'common.retry': 'Retry',
+    'common.error.db_load': 'Failed to load database',
+    'common.error.render': 'Error rendering view',
+    'common.not_found': 'Page not found',
+    'common.all': 'All',
+    'common.remove': 'Remove',
+    'common.clear_all': 'Clear All',
+    'common.no_results': 'No results',
+    'common.unknown': 'unknown',
+    'common.price': 'Price',
+    'common.na': 'N/A',
+    'common.share': 'Share',
+    'common.share.copied': 'URL copied to clipboard!',
+    'common.share.failed': 'Failed to copy URL',
+    'common.reset': 'Reset',
+
+    // Categories
+    'cat.headphone': 'Headphone',
+    'cat.iem': 'IEM',
+    'cat.dac': 'DAC',
+    'cat.headphone_amp': 'Headphone Amp',
+    'cat.speaker': 'Speaker',
+    'cat.speaker_amp': 'Speaker Amp',
+    'cat.mic': 'Microphone',
+    'cat.usb_interface': 'USB Interface',
+
+    // Home
+    'home.title': 'Frieve AudioSpecs',
+    'home.subtitle': 'Audio equipment database — browse, analyze, and compare specifications',
+    'home.stat.products': 'Products',
+    'home.stat.brands': 'Brands',
+    'home.stat.with_perf': 'With Perf Data',
+    'home.stat.with_price': 'With Price Data',
+    'home.card.category_dist': 'Category Distribution',
+    'home.card.quick_analysis': 'Quick Analysis',
+
+    // Analysis
+    'analysis.title': 'Analysis',
+    'analysis.subtitle': 'Interactive scatter plots of audio equipment metrics',
+    'analysis.label.category': 'Category',
+    'analysis.label.x_axis': 'X Axis',
+    'analysis.label.y_axis': 'Y Axis',
+    'analysis.label.color': 'Color',
+    'analysis.color.category': 'Category',
+    'analysis.color.brand': 'Brand',
+    'analysis.warning.few_points': 'Only {count} data points available for this combination. Results may not be representative.',
+    'analysis.info.limited': '{count} data points — limited coverage for this combination.',
+    'analysis.ctx.add_compare': 'Add to Compare',
+    'analysis.ctx.search_google': 'Search on Google',
+    'analysis.ctx.search_amazon': 'Search on Amazon',
+    'analysis.ctx.sources': 'Sources',
+
+    // Explore
+    'explore.title': 'Explore Products',
+    'explore.subtitle': 'Browse and filter the full product database',
+    'explore.label.search': 'Search',
+    'explore.placeholder.search': 'Product or brand name…',
+    'explore.label.category': 'Category',
+    'explore.label.columns': 'Columns',
+    'explore.col.brand': 'Brand',
+    'explore.col.product': 'Product',
+    'explore.col.category': 'Category',
+    'explore.col.price_anchor_usd': 'Price\n(USD)',
+    'explore.col.msrp_usd': 'MSRP\n(USD)',
+    'explore.col.release_year': 'Year',
+    'explore.col.perf_sinad_db': 'SINAD\n(dB)',
+    'explore.col.perf_snr_db': 'SNR\n(dB)',
+    'explore.col.perf_thd_percent': 'THD\n(%)',
+    'explore.col.perf_dynamic_range_db': 'Dynamic Range\n(dB)',
+    'explore.col.perf_crosstalk_db': 'Crosstalk\n(dB)',
+    'explore.col.spec_impedance_ohm': 'Impedance\n(Ω)',
+    'explore.col.sensitivity_proxy_db': 'Sensitivity\n(dB)',
+    'explore.col.driveability_index': 'Driveability',
+    'explore.col.spec_weight_g': 'Weight\n(g)',
+    'explore.col.driver_total_count': 'Driver\nCount',
+    'explore.col.spec_freq_low_hz': 'Freq Low\n(Hz)',
+    'explore.col.spec_freq_high_hz': 'Freq High\n(Hz)',
+    'explore.col.compare': 'Compare',
+    'explore.col.search': 'Search',
+    'explore.no_products': 'No products found',
+    'explore.showing': 'Showing {start}–{end} of {total}',
+    'explore.prev': '← Prev',
+    'explore.next': 'Next →',
+    'explore.add_to_compare': 'Add to compare',
+
+    // Compare
+    'compare.title': 'Compare Products',
+    'compare.subtitle': 'Side-by-side specification comparison',
+    'compare.label.add': 'Add Product',
+    'compare.placeholder.search': 'Search by name or brand…',
+    'compare.empty.line1': 'Search and add products above to compare them side by side.',
+    'compare.empty.line2': 'You can also add products from the Explore view.',
+    'compare.field.category': 'Category',
+    'compare.field.price': 'Price (USD)',
+    'compare.field.year': 'Release Year',
+    'compare.field.sinad': 'SINAD (dB)',
+    'compare.field.snr': 'SNR (dB)',
+    'compare.field.thd': 'THD (%)',
+    'compare.field.dynamic_range': 'Dynamic Range (dB)',
+    'compare.field.crosstalk': 'Crosstalk (dB)',
+    'compare.field.impedance': 'Impedance (Ω)',
+    'compare.field.sensitivity': 'Sensitivity Proxy (dB)',
+    'compare.field.driveability': 'Driveability',
+    'compare.field.weight': 'Weight',
+    'compare.field.driver_count': 'Driver Count',
+    'compare.field.freq_low': 'Freq Low (Hz)',
+    'compare.field.freq_high': 'Freq High (Hz)',
+    'compare.field.crossover': 'Crossover (Hz)',
+    'compare.field.search': 'Search',
+    'compare.field.sources': 'Sources',
+
+    // About
+    'about.title': 'About',
+    'about.subtitle': 'Audio equipment database & visualization tool',
+    'about.loading': 'Loading…',
+    'about.section.what': 'What is Frieve - AudioSpecs?',
+    'about.section.what.body': 'Frieve AudioSpecs provides cross-cutting search, comparison, and visualization of specs, measured performance, and pricing for audio equipment — headphones, IEMs, DACs, headphone amps, and speakers. It covers a large number of products and brands, allowing analysis from many angles.',
+    'about.section.data': 'About the Data',
+    'about.stat.products': 'Products',
+    'about.stat.with_price': 'With Price',
+    'about.stat.with_perf': 'With Perf Data',
+    'about.stat.identity_gaps': 'Identity Gaps',
+    'about.card.coverage': 'Coverage by Category',
+    'about.col.category': 'Category',
+    'about.col.total': 'Total',
+    'about.col.with_price': 'With Price',
+    'about.col.with_perf': 'With Perf',
+    'about.col.price_pct': 'Price %',
+    'about.col.perf_pct': 'Perf %',
+    'about.section.who': 'Who is this for?',
+    'about.who.buyers': 'People considering audio equipment purchases — compare performance by price range and view candidate specs side by side.',
+    'about.who.enthusiasts': 'Audio enthusiasts & reviewers — objective analysis using measured data like SINAD, THD, and impedance.',
+    'about.who.data': 'Data-driven shoppers — for those who prefer numbers over subjective reviews.',
+    'about.section.features': 'Key Features',
+    'about.feature.scatter.title': 'Analysis Scatter',
+    'about.feature.scatter.body': 'Visualize product data as scatter plots to intuitively grasp price-performance relationships and category trends. Right-click a product to add it to comparisons or search for it.',
+    'about.feature.explore.title': 'Explore',
+    'about.feature.explore.body': 'Browse all products in a filterable, sortable table. Narrow by category, brand, price range, and more.',
+    'about.feature.compare.title': 'Compare',
+    'about.feature.compare.body': 'Place multiple products side by side to directly compare specs, performance, and pricing.',
+    'about.section.highlights': 'Highlights',
+    'about.highlight.objective': 'Objective, measurement-based comparison — uses third-party-reviewed SINAD, THD, SNR, dynamic range, impedance, sensitivity, and more.',
+    'about.highlight.unified': 'Unified cross-category database — multiple product categories in one database for consistent comparison.',
+    'about.highlight.share': 'Shareable URLs — scatter presets, filters, and comparison sets can be shared via URL.',
+    'about.section.other': 'Other Information',
+    'about.other.pricing': 'Prices are in USD. Street price is used when available; otherwise MSRP.',
+    'about.section.notes': 'Notes',
+    'about.note.freshness': 'Data is updated periodically but may not reflect the latest market prices.',
+    'about.note.errors': 'The current data contains a significant number of incorrect records (being corrected over time).',
+    'about.book.intro': 'A scientific introduction to audio for informed product selection (free e-book)',
+    'about.book.title': 'The End and Rebirth of Audio: Deconstruction and Reconstruction of Audio through Pure Reason',
+    'about.book.url': 'https://deuslibri.com/book/the-end-and-rebirth-of-audio/en',
+    'about.link.website': 'Frieve Web Site',
+    'about.link.support': 'Support This Project',
+
+    // Axes
+    'axis.price_anchor_usd': 'Price (USD)',
+    'axis.msrp_usd': 'MSRP',
+    'axis.release_year': 'Release Year',
+    'axis.perf_sinad_db': 'SINAD (dB)',
+    'axis.perf_snr_db': 'SNR (dB)',
+    'axis.perf_thd_percent': 'THD (%)',
+    'axis.perf_dynamic_range_db': 'Dynamic Range (dB)',
+    'axis.perf_crosstalk_db': 'Crosstalk (dB)',
+    'axis.spec_impedance_ohm': 'Impedance (Ω)',
+    'axis.sensitivity_proxy_db': 'Sensitivity Proxy (dB)',
+    'axis.driveability_index': 'Driveability',
+    'axis.spec_weight_g': 'Weight (g)',
+    'axis.driver_total_count': 'Driver Count',
+    'axis.spec_freq_low_hz': 'Freq Low (Hz)',
+    'axis.spec_freq_high_hz': 'Freq High (Hz)',
+
+    // Axis descriptions
+    'axisdesc.price_anchor_usd': 'Estimated street price or MSRP in USD. Log scale highlights relative price differences.',
+    'axisdesc.msrp_usd': 'Manufacturer\'s suggested retail price. May differ from actual street price.',
+    'axisdesc.release_year': 'Year of product release. Useful for observing technology trends over time.',
+    'axisdesc.perf_sinad_db': 'Signal-to-Noise and Distortion ratio. Higher is better — indicates overall signal purity.',
+    'axisdesc.perf_snr_db': 'Signal-to-Noise Ratio. Higher is better — measures background noise level.',
+    'axisdesc.perf_thd_percent': 'Total Harmonic Distortion as a percentage. Lower is better — measures signal distortion.',
+    'axisdesc.perf_dynamic_range_db': 'Dynamic Range in dB. Higher is better — the span between quietest and loudest reproducible signals.',
+    'axisdesc.perf_crosstalk_db': 'Channel separation in dB. Lower (more negative) is better — measures bleed between L/R channels.',
+    'axisdesc.spec_impedance_ohm': 'Electrical impedance in ohms. Higher impedance draws less current but needs more voltage — high-impedance models (250Ω+) typically require a dedicated amp.',
+    'axisdesc.sensitivity_proxy_db': 'Estimated sensitivity (dB/mW or dB/V equivalent). Higher values produce louder output for a given input — models above ~110 dB are easily driven by portable devices.',
+    'axisdesc.driveability_index': 'Composite index combining impedance and sensitivity. Higher = easier to drive from phones or portable DAPs. Lower values suggest a dedicated headphone amp is recommended.',
+    'axisdesc.spec_weight_g': 'Product weight in grams. Affects comfort for extended listening sessions.',
+    'axisdesc.driver_total_count': 'Total number of driver units. Multi-driver designs are common in IEMs.',
+    'axisdesc.spec_freq_low_hz': 'Lower limit of the specified frequency response range (Hz). Lower values indicate deeper bass extension.',
+    'axisdesc.spec_freq_high_hz': 'Upper limit of the specified frequency response range (Hz). Higher values indicate extended treble reproduction.',
+
+    // Presets
+    'preset.msrp_vs_sinad': 'Price vs measured quality',
+    'preset.msrp_vs_thd': 'Price vs distortion',
+    'preset.thd_vs_sinad': 'Correlation between perf metrics',
+    'preset.release_vs_sinad': 'Technology evolution',
+    'preset.impedance_vs_sensitivity': 'Driveability overview',
+    'preset.msrp_vs_driveability': 'Price vs driveability',
+    'preset.release_vs_driveability': 'Era vs driveability',
+    'preset.msrp_vs_weight': 'Price vs physical weight',
+    'preset.msrp_vs_freq_range': 'Frequency range overview',
+  },
+
+  ja: {
+    // Page title
+    'page.title': 'Frieve - AudioSpecs — オーディオ機器データベース',
+
+    // Nav
+    'nav.logo': 'Frieve - AudioSpecs',
+    'nav.home': 'ホーム',
+    'nav.analysis': '分析',
+    'nav.explore': '一覧',
+    'nav.compare': '比較',
+    'nav.about': '当サイトについて',
+
+    // Common
+    'common.loading': '読み込み中…',
+    'common.loading_database': 'データベースを読み込み中…',
+    'common.retry': '再試行',
+    'common.error.db_load': 'データベースの読み込みに失敗しました',
+    'common.error.render': 'ビューの描画でエラーが発生しました',
+    'common.not_found': 'ページが見つかりません',
+    'common.all': 'すべて',
+    'common.remove': '削除',
+    'common.clear_all': 'すべて削除',
+    'common.no_results': '結果なし',
+    'common.unknown': '不明',
+    'common.price': '価格',
+    'common.na': 'N/A',
+    'common.share': '共有',
+    'common.share.copied': 'URLをクリップボードにコピーしました！',
+    'common.share.failed': 'URLのコピーに失敗しました',
+    'common.reset': 'リセット',
+
+    // Categories
+    'cat.headphone': 'ヘッドホン',
+    'cat.iem': 'IEM',
+    'cat.dac': 'DAC',
+    'cat.headphone_amp': 'ヘッドホンアンプ',
+    'cat.speaker': 'スピーカー',
+    'cat.speaker_amp': 'スピーカーアンプ',
+    'cat.mic': 'マイク',
+    'cat.usb_interface': 'USBインターフェース',
+
+    // Home
+    'home.title': 'Frieve AudioSpecs',
+    'home.subtitle': 'オーディオ機器データベース — スペックの閲覧・分析・比較',
+    'home.stat.products': '製品数',
+    'home.stat.brands': 'ブランド数',
+    'home.stat.with_perf': '性能データあり',
+    'home.stat.with_price': '価格データあり',
+    'home.card.category_dist': 'カテゴリ分布',
+    'home.card.quick_analysis': 'クイック分析',
+
+    // Analysis
+    'analysis.title': '分析',
+    'analysis.subtitle': 'オーディオ機器の各指標をインタラクティブな散布図で可視化',
+    'analysis.label.category': 'カテゴリ',
+    'analysis.label.x_axis': 'X軸',
+    'analysis.label.y_axis': 'Y軸',
+    'analysis.label.color': '色分け',
+    'analysis.color.category': 'カテゴリ',
+    'analysis.color.brand': 'ブランド',
+    'analysis.warning.few_points': 'この組み合わせのデータポイントは{count}件のみです。結果は代表的でない可能性があります。',
+    'analysis.info.limited': '{count}件のデータポイント — この組み合わせのカバレッジは限定的です。',
+    'analysis.ctx.add_compare': '比較に追加',
+    'analysis.ctx.search_google': 'Googleで検索',
+    'analysis.ctx.search_amazon': 'Amazonで検索',
+    'analysis.ctx.sources': '出典',
+
+    // Explore
+    'explore.title': '製品一覧',
+    'explore.subtitle': '製品データベースの閲覧とフィルタリング',
+    'explore.label.search': '検索',
+    'explore.placeholder.search': '製品名またはブランド名…',
+    'explore.label.category': 'カテゴリ',
+    'explore.label.columns': '表示列',
+    'explore.col.brand': 'ブランド',
+    'explore.col.product': '製品名',
+    'explore.col.category': 'カテゴリ',
+    'explore.col.price_anchor_usd': '価格\n(USD)',
+    'explore.col.msrp_usd': '定価\n(USD)',
+    'explore.col.release_year': '発売年',
+    'explore.col.perf_sinad_db': 'SINAD\n(dB)',
+    'explore.col.perf_snr_db': 'SNR\n(dB)',
+    'explore.col.perf_thd_percent': 'THD\n(%)',
+    'explore.col.perf_dynamic_range_db': 'ダイナミックレンジ\n(dB)',
+    'explore.col.perf_crosstalk_db': 'クロストーク\n(dB)',
+    'explore.col.spec_impedance_ohm': 'インピーダンス\n(Ω)',
+    'explore.col.sensitivity_proxy_db': '感度\n(dB)',
+    'explore.col.driveability_index': '鳴らしやすさ',
+    'explore.col.spec_weight_g': '重量\n(g)',
+    'explore.col.driver_total_count': 'ドライバー数',
+    'explore.col.spec_freq_low_hz': '周波数下限\n(Hz)',
+    'explore.col.spec_freq_high_hz': '周波数上限\n(Hz)',
+    'explore.col.compare': '比較',
+    'explore.col.search': '検索',
+    'explore.no_products': '製品が見つかりません',
+    'explore.showing': '{start}–{end} / {total}件',
+    'explore.prev': '← 前へ',
+    'explore.next': '次へ →',
+    'explore.add_to_compare': '比較に追加',
+
+    // Compare
+    'compare.title': '製品比較',
+    'compare.subtitle': 'スペックの横並び比較',
+    'compare.label.add': '製品を追加',
+    'compare.placeholder.search': '製品名またはブランドで検索…',
+    'compare.empty.line1': '上の検索から製品を追加して横並びで比較できます。',
+    'compare.empty.line2': '一覧ページからも追加できます。',
+    'compare.field.category': 'カテゴリ',
+    'compare.field.price': '価格 (USD)',
+    'compare.field.year': '発売年',
+    'compare.field.sinad': 'SINAD (dB)',
+    'compare.field.snr': 'SNR (dB)',
+    'compare.field.thd': 'THD (%)',
+    'compare.field.dynamic_range': 'ダイナミックレンジ (dB)',
+    'compare.field.crosstalk': 'クロストーク (dB)',
+    'compare.field.impedance': 'インピーダンス (Ω)',
+    'compare.field.sensitivity': '感度プロキシ (dB)',
+    'compare.field.driveability': '鳴らしやすさ',
+    'compare.field.weight': '重量',
+    'compare.field.driver_count': 'ドライバー数',
+    'compare.field.freq_low': '再生周波数下限 (Hz)',
+    'compare.field.freq_high': '再生周波数上限 (Hz)',
+    'compare.field.crossover': 'クロスオーバー (Hz)',
+    'compare.field.search': '検索',
+    'compare.field.sources': '出典',
+
+    // About
+    'about.title': '当サイトについて',
+    'about.subtitle': 'オーディオ機器データベース & 可視化ツール',
+    'about.loading': '読み込み中…',
+    'about.section.what': 'Frieve - AudioSpecsとは',
+    'about.section.what.body': 'Frieve AudioSpecsは、ヘッドホン・IEM・DAC・ヘッドホンアンプ・スピーカーといったオーディオ機器のスペック・実測性能・価格情報の横断的な検索・比較・可視化を提供するサイトです。多数の製品・ブランドの情報を収録しており、様々な角度から分析することができます。',
+    'about.section.data': 'データについて',
+    'about.stat.products': '製品数',
+    'about.stat.with_price': '価格あり',
+    'about.stat.with_perf': '性能データあり',
+    'about.stat.identity_gaps': 'ID欠損',
+    'about.card.coverage': 'カテゴリ別カバレッジ',
+    'about.col.category': 'カテゴリ',
+    'about.col.total': '合計',
+    'about.col.with_price': '価格あり',
+    'about.col.with_perf': '性能あり',
+    'about.col.price_pct': '価格 %',
+    'about.col.perf_pct': '性能 %',
+    'about.section.who': '誰のためのサイト？',
+    'about.who.buyers': 'オーディオ機器の購入を検討している方 — 価格帯ごとの性能比較や、候補製品の仕様を並べて確認できます。',
+    'about.who.enthusiasts': 'オーディオ愛好家・レビュアー — SINAD・THD・インピーダンスなどの計測データを使った客観的な分析ができます。',
+    'about.who.data': 'データで選びたい方 — 主観的なレビューでなく、数値に基づいた製品選定をしたい方に向いています。',
+    'about.section.features': '主な機能',
+    'about.feature.scatter.title': '散布図分析',
+    'about.feature.scatter.body': '製品データを散布図で可視化し、価格と性能の関係やカテゴリごとの傾向を直感的に把握できます。各製品を右クリックすることで、比較対象として追加したり、検索したりすることができます。',
+    'about.feature.explore.title': '製品一覧',
+    'about.feature.explore.body': '全製品をフィルタ・ソート付きのテーブルで閲覧できます。カテゴリ、ブランド、価格帯などで絞り込み、気になる製品をすばやく見つけられます。',
+    'about.feature.compare.title': '製品比較',
+    'about.feature.compare.body': '複数の製品を並べて、スペック・性能・価格を直接比較できます。購入候補を絞り込む際に便利です。',
+    'about.section.highlights': '主な特徴',
+    'about.highlight.objective': '客観的なデータに基づく比較 — 主観的なレビュースコアではなく、第三者レビューによるSINAD・THD・SNR・ダイナミックレンジなどの実測値や、インピーダンス・感度などの公表スペックを使って比較できます。',
+    'about.highlight.unified': 'カテゴリ横断の統一データベース — 複数カテゴリの製品情報が1つのデータベースに統合されています。異なるカテゴリの製品を同じ基準で確認できます。',
+    'about.highlight.share': 'URLで共有可能 — 散布図のプリセットやフィルタ条件、比較対象の製品などをURLとして共有できます。',
+    'about.section.other': 'その他',
+    'about.other.pricing': '価格情報はUSD（米ドル）で統一しており、実売価格がある場合はそちらを優先、ない場合はメーカー希望小売価格を使用しています。',
+    'about.section.notes': '注意事項',
+    'about.note.freshness': 'データは定期的に更新されますが、最新の市場価格を反映していない場合があります。',
+    'about.note.errors': '現状データには相当数の間違ったレコードが含まれています（順次修正予定）。',
+    'about.book.intro': '失敗しないオーディオ製品選びのための科学的オーディオ入門書（無料電子書籍）',
+    'about.book.title': 'オーディオの終焉と再生 ― 純粋理性による音響の解体と再構築',
+    'about.book.url': 'https://deuslibri.com/book/the-end-and-rebirth-of-audio/ja',
+    'about.link.website': 'FrieveのWebサイトへ',
+    'about.link.support': 'プロジェクトを支援する',
+
+    // Axes
+    'axis.price_anchor_usd': '価格 (USD)',
+    'axis.msrp_usd': '定価',
+    'axis.release_year': '発売年',
+    'axis.perf_sinad_db': 'SINAD (dB)',
+    'axis.perf_snr_db': 'SNR (dB)',
+    'axis.perf_thd_percent': 'THD (%)',
+    'axis.perf_dynamic_range_db': 'ダイナミックレンジ (dB)',
+    'axis.perf_crosstalk_db': 'クロストーク (dB)',
+    'axis.spec_impedance_ohm': 'インピーダンス (Ω)',
+    'axis.sensitivity_proxy_db': '感度プロキシ (dB)',
+    'axis.driveability_index': '鳴らしやすさ',
+    'axis.spec_weight_g': '重量 (g)',
+    'axis.driver_total_count': 'ドライバー数',
+    'axis.spec_freq_low_hz': '再生周波数下限 (Hz)',
+    'axis.spec_freq_high_hz': '再生周波数上限 (Hz)',
+
+    // Axis descriptions
+    'axisdesc.price_anchor_usd': '実売価格または定価（USD）。対数スケールで価格帯の相対差を可視化します。',
+    'axisdesc.msrp_usd': 'メーカー希望小売価格。実売価格とは異なる場合があります。',
+    'axisdesc.release_year': '製品の発売年。技術トレンドの時系列変化を観察できます。',
+    'axisdesc.perf_sinad_db': '信号対雑音歪み比。高いほど良好 — 信号の純度を総合的に示します。',
+    'axisdesc.perf_snr_db': '信号対雑音比。高いほど良好 — バックグラウンドノイズの少なさを示します。',
+    'axisdesc.perf_thd_percent': '全高調波歪み率。低いほど良好 — 信号の歪みの少なさを示します。',
+    'axisdesc.perf_dynamic_range_db': 'ダイナミックレンジ（dB）。高いほど良好 — 再現可能な最小〜最大信号の幅です。',
+    'axisdesc.perf_crosstalk_db': 'チャンネルセパレーション（dB）。低い（負の値が大きい）ほど良好 — L/R間の漏れを示します。',
+    'axisdesc.spec_impedance_ohm': '電気インピーダンス（Ω）。高インピーダンス（250Ω以上）は電流が少なく済む反面、高い電圧が必要で専用アンプでの駆動が望ましいです。',
+    'axisdesc.sensitivity_proxy_db': '推定感度（dB/mW または dB/V 相当）。高いほど同じ入力で大きな音量が得られます。約110 dB以上ならスマホやポータブル機器でも十分駆動できます。',
+    'axisdesc.driveability_index': 'インピーダンスと感度を組み合わせた複合指標。高いほどスマホやポータブルDAPで鳴らしやすく、低い場合は専用ヘッドホンアンプの使用が推奨されます。',
+    'axisdesc.spec_weight_g': '製品重量（g）。長時間リスニング時の装着感に影響します。',
+    'axisdesc.driver_total_count': 'ドライバーユニットの総数。IEMではマルチドライバー構成が一般的です。',
+    'axisdesc.spec_freq_low_hz': '再生周波数帯域の下限（Hz）。値が低いほど低音域の再生能力が高いことを示します。',
+    'axisdesc.spec_freq_high_hz': '再生周波数帯域の上限（Hz）。値が高いほど高音域の再生能力が高いことを示します。',
+
+    // Presets
+    'preset.msrp_vs_sinad': '価格 vs 測定品質',
+    'preset.msrp_vs_thd': '価格 vs 歪み',
+    'preset.thd_vs_sinad': '性能指標間の相関',
+    'preset.release_vs_sinad': '技術の進化',
+    'preset.impedance_vs_sensitivity': '鳴らしやすさ概観',
+    'preset.msrp_vs_driveability': '価格 vs 鳴らしやすさ',
+    'preset.release_vs_driveability': '年代 vs 鳴らしやすさ',
+    'preset.msrp_vs_weight': '価格 vs 重量',
+    'preset.msrp_vs_freq_range': '周波数レンジ概観',
+  },
+};
+
+/** Detect locale from browser settings */
+function detectLocale(): Locale {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === 'en' || saved === 'ja') return saved;
+
+  const lang = navigator.language || (navigator as { userLanguage?: string }).userLanguage || 'en';
+  if (lang.startsWith('ja')) return 'ja';
+  return 'en';
+}
+
+/** Initialize i18n — call once at startup */
+export function initI18n(): void {
+  currentLocale = detectLocale();
+  document.documentElement.lang = currentLocale;
+}
+
+/** Get current locale */
+export function getLocale(): Locale {
+  return currentLocale;
+}
+
+/** Set locale and persist */
+export function setLocale(locale: Locale): void {
+  currentLocale = locale;
+  localStorage.setItem(STORAGE_KEY, locale);
+  document.documentElement.lang = locale;
+  document.title = t('page.title');
+  for (const cb of onChangeCallbacks) cb();
+}
+
+/** Register a callback for locale changes */
+export function onLocaleChange(cb: () => void): void {
+  onChangeCallbacks.push(cb);
+}
+
+/** Get translated string. Supports {key} placeholders. */
+export function t(key: string, params?: Record<string, string | number>): string {
+  let str = translations[currentLocale]?.[key] ?? translations.en[key] ?? key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      str = str.replace(`{${k}}`, String(v));
+    }
+  }
+  return str;
+}
+
+/** Get translated category label */
+export function tCat(categoryKey: string): string {
+  return t(`cat.${categoryKey}`) || categoryKey;
+}
+
+/** Get translated axis label */
+export function tAxis(axisId: string): string {
+  return t(`axis.${axisId}`);
+}
+
+/** Get translated preset purpose */
+export function tPreset(presetId: string): string {
+  return t(`preset.${presetId}`);
+}
+
+/** Available locales for the UI selector */
+export const AVAILABLE_LOCALES: { code: Locale; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
+];
