@@ -40,6 +40,9 @@ export const AXES: AxisDef[] = [
   { id: 'driver_total_count', source: 'driver_total_count', label: 'Driver Count', scale: 'linear' },
   { id: 'spec_freq_low_hz', source: 'spec_freq_low_hz', label: 'Freq Low (Hz)', scale: 'log' },
   { id: 'spec_freq_high_hz', source: 'spec_freq_high_hz', label: 'Freq High (Hz)', scale: 'log' },
+  // FR Harman (Headphone / IEM)
+  { id: 'perf_fr_harman_std_db', source: 'perf_fr_harman_std_db', label: 'FR Harman Std Dev (dB)', scale: 'linear' },
+  { id: 'perf_fr_harman_avg_db', source: 'perf_fr_harman_avg_db', label: 'FR Harman Avg Dev (dB)', scale: 'linear' },
 ];
 
 export const PRESETS: Preset[] = [
@@ -53,6 +56,9 @@ export const PRESETS: Preset[] = [
   { id: 'msrp_vs_driveability', x: 'price_anchor_usd', y: 'driveability_index', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs driveability' },
   { id: 'release_vs_driveability', x: 'release_year', y: 'driveability_index', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Era vs driveability' },
   { id: 'msrp_vs_weight', x: 'price_anchor_usd', y: 'spec_weight_g', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs physical weight' },
+  // FR Harman
+  { id: 'msrp_vs_harman_std', x: 'price_anchor_usd', y: 'perf_fr_harman_std_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs FR Harman deviation' },
+  { id: 'msrp_vs_harman_avg', x: 'price_anchor_usd', y: 'perf_fr_harman_avg_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs FR Harman avg deviation' },
   // Frequency range
   { id: 'msrp_vs_freq_range', x: 'spec_freq_low_hz', y: 'spec_freq_high_hz', color: 'brand_name_en', categories: ['headphone', 'iem', 'speaker'], purpose: 'Frequency range overview' },
 ];

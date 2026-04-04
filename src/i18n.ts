@@ -74,7 +74,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'home.section.price_freq_low_spk': 'On the other hand, most speakers still cannot reproduce down to the 20Hz hearing threshold. Spending more money can get you a product with a lower frequency floor (wider bandwidth).',
     'home.section.top_spk_freq_low': 'Speakers with the lowest frequency floor',
     'home.section.price_weight': 'In most categories, spending more money gets you a heavier product (though weight has minimal impact on sound quality except for speakers).',
-    'home.section.price_drivers': 'In IEMs, spending more money gets you products with more drivers. However, much data suggests that multiple drivers contribute little to sound quality improvement.',
+    'home.section.price_drivers': 'In IEMs, spending more money gets you products with more drivers.',
+    'home.section.price_harman_std': 'For IEMs and headphones, spending more money does not reduce the deviation from the target curve — in fact, it tends to increase.',
+    'home.section.top_hp_harman_std': 'Headphones and IEMs with the lowest FR Harman standard deviation',
 
     // Analysis
     'analysis.title': 'Analysis',
@@ -117,6 +119,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'explore.col.driver_total_count': 'Driver\nCount',
     'explore.col.spec_freq_low_hz': 'Freq Low\n(Hz)',
     'explore.col.spec_freq_high_hz': 'Freq High\n(Hz)',
+    'explore.col.perf_fr_harman_std_db': 'FR Harman\nStd Dev (dB)',
+    'explore.col.perf_fr_harman_avg_db': 'FR Harman\nAvg Dev (dB)',
     'explore.col.compare': 'Compare',
     'explore.col.search': 'Search',
     'explore.no_products': 'No products found',
@@ -147,9 +151,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'compare.field.driver_count': 'Driver Count',
     'compare.field.freq_low': 'Freq Low (Hz)',
     'compare.field.freq_high': 'Freq High (Hz)',
+    'compare.field.fr_harman_std': 'FR Harman Std Dev (dB)',
+    'compare.field.fr_harman_avg': 'FR Harman Avg Dev (dB)',
     'compare.field.crossover': 'Crossover (Hz)',
     'compare.field.search': 'Search',
     'compare.field.sources': 'Sources',
+    'compare.fr.title': 'Frequency Response',
+    'compare.fr.yaxis': 'Deviation (dB)',
+    'compare.fr.xaxis': 'Frequency (Hz)',
 
     // About
     'about.title': 'About',
@@ -215,6 +224,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'axis.driver_total_count': 'Driver Count',
     'axis.spec_freq_low_hz': 'Freq Low (Hz)',
     'axis.spec_freq_high_hz': 'Freq High (Hz)',
+    'axis.perf_fr_harman_std_db': 'FR Harman Std Dev (dB)',
+    'axis.perf_fr_harman_avg_db': 'FR Harman Avg Dev (dB)',
 
     // Axis descriptions
     'axisdesc.price_anchor_usd': 'Estimated street price or MSRP in USD. Log scale highlights relative price differences.',
@@ -232,6 +243,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'axisdesc.driver_total_count': 'Total number of driver units. Multi-driver designs are common in IEMs.',
     'axisdesc.spec_freq_low_hz': 'Lower limit of the specified frequency response range (Hz). Lower values indicate deeper bass extension.',
     'axisdesc.spec_freq_high_hz': 'Upper limit of the specified frequency response range (Hz). Higher values indicate extended treble reproduction.',
+    'axisdesc.perf_fr_harman_std_db': 'Standard deviation of frequency response from the Harman target curve (dB). Lower is better — indicates more consistent adherence to the target.',
+    'axisdesc.perf_fr_harman_avg_db': 'Average deviation of frequency response from the Harman target curve (dB). Lower is better — indicates closer overall match to the target.',
 
     // Presets
     'preset.msrp_vs_sinad': 'Price vs measured quality',
@@ -242,6 +255,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'preset.msrp_vs_driveability': 'Price vs driveability',
     'preset.release_vs_driveability': 'Era vs driveability',
     'preset.msrp_vs_weight': 'Price vs physical weight',
+    'preset.msrp_vs_harman_std': 'Price vs FR Harman deviation',
+    'preset.msrp_vs_harman_avg': 'Price vs FR Harman avg deviation',
     'preset.msrp_vs_freq_range': 'Frequency range overview',
   },
 
@@ -313,7 +328,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'home.section.price_freq_low_spk': '一方で、スピーカーの再生周波数下限は未だに聴覚限界の20Hzに達していないものがほとんどで、より多くの金額を払うとより再生周波数下限の低い（帯域の広い）製品を手に入れることができます。',
     'home.section.top_spk_freq_low': '特に再生周波数下限の低いスピーカー',
     'home.section.price_weight': 'ほとんどのカテゴリにおいて、より多くの金額を払うとより重い製品を手に入れることができます（ただしスピーカーを除き重量の音質への寄与は軽微です）。',
-    'home.section.price_drivers': 'IEMではより多くの金額を払うと、より多くのドライバーを搭載した製品を手に入れることができます。しかし多くのデータは多ドライバーの音質向上への寄与は小さいことを示しています。',
+    'home.section.price_drivers': 'IEMではより多くの金額を払うと、より多くのドライバーを搭載した製品を手に入れることができます。',
+    'home.section.price_harman_std': 'IEM、ヘッドホンではより多くの金額を支払っても、ターゲットカーブとの偏差は縮まらない（むしろ拡大する）傾向にあることが分かります。',
+    'home.section.top_hp_harman_std': '特にFR Harman 標準偏差の小さいヘッドホン、IEM',
 
     // Analysis
     'analysis.title': '分析',
@@ -356,6 +373,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'explore.col.driver_total_count': 'ドライバー数',
     'explore.col.spec_freq_low_hz': '周波数下限\n(Hz)',
     'explore.col.spec_freq_high_hz': '周波数上限\n(Hz)',
+    'explore.col.perf_fr_harman_std_db': 'FR Harman\n標準偏差 (dB)',
+    'explore.col.perf_fr_harman_avg_db': 'FR Harman\n平均偏差 (dB)',
     'explore.col.compare': '比較',
     'explore.col.search': '検索',
     'explore.no_products': '製品が見つかりません',
@@ -386,9 +405,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'compare.field.driver_count': 'ドライバー数',
     'compare.field.freq_low': '再生周波数下限 (Hz)',
     'compare.field.freq_high': '再生周波数上限 (Hz)',
+    'compare.field.fr_harman_std': 'FR Harman 標準偏差 (dB)',
+    'compare.field.fr_harman_avg': 'FR Harman 平均偏差 (dB)',
     'compare.field.crossover': 'クロスオーバー (Hz)',
     'compare.field.search': '検索',
     'compare.field.sources': '出典',
+    'compare.fr.title': '周波数特性',
+    'compare.fr.yaxis': '偏差 (dB)',
+    'compare.fr.xaxis': '周波数 (Hz)',
 
     // About
     'about.title': '当サイトについて',
@@ -454,6 +478,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'axis.driver_total_count': 'ドライバー数',
     'axis.spec_freq_low_hz': '再生周波数下限 (Hz)',
     'axis.spec_freq_high_hz': '再生周波数上限 (Hz)',
+    'axis.perf_fr_harman_std_db': 'FR Harman 標準偏差 (dB)',
+    'axis.perf_fr_harman_avg_db': 'FR Harman 平均偏差 (dB)',
 
     // Axis descriptions
     'axisdesc.price_anchor_usd': '実売価格または定価（USD）。対数スケールで価格帯の相対差を可視化します。',
@@ -471,6 +497,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'axisdesc.driver_total_count': 'ドライバーユニットの総数。IEMではマルチドライバー構成が一般的です。',
     'axisdesc.spec_freq_low_hz': '再生周波数帯域の下限（Hz）。値が低いほど低音域の再生能力が高いことを示します。',
     'axisdesc.spec_freq_high_hz': '再生周波数帯域の上限（Hz）。値が高いほど高音域の再生能力が高いことを示します。',
+    'axisdesc.perf_fr_harman_std_db': 'Harmanターゲットカーブからの周波数特性の標準偏差（dB）。低いほど良好 — ターゲットへの追従が安定していることを示します。',
+    'axisdesc.perf_fr_harman_avg_db': 'Harmanターゲットカーブからの周波数特性の平均偏差（dB）。低いほど良好 — ターゲットへの全体的な一致度が高いことを示します。',
 
     // Presets
     'preset.msrp_vs_sinad': '価格 vs 測定品質',
@@ -481,6 +509,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'preset.msrp_vs_driveability': '価格 vs 鳴らしやすさ',
     'preset.release_vs_driveability': '年代 vs 鳴らしやすさ',
     'preset.msrp_vs_weight': '価格 vs 重量',
+    'preset.msrp_vs_harman_std': '価格 vs FR Harman偏差',
+    'preset.msrp_vs_harman_avg': '価格 vs FR Harman平均偏差',
     'preset.msrp_vs_freq_range': '周波数レンジ概観',
   },
 };

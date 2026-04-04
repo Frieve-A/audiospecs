@@ -51,13 +51,21 @@ function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
+function formatUnitCasing(s: string): string {
+  // CSS for table headers uses `text-transform: uppercase`, so we explicitly protect unit strings.
+  return s
+    .replace(/\(Hz\)/g, '(<span class="unit-case">Hz</span>)')
+    .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)');
+}
+
 export async function renderTableWidget(
   container: HTMLElement,
   config: TableWidgetConfig,
 ): Promise<void> {
   const tableId = `table-widget-${config.id}`;
   const limit = config.limit ?? 10;
-  const numericKeys = config.columns;
+  const numericKeys = config.columns.filter((k) => k !== 'category_primary');
+  const showCategory = config.columns.includes('category_primary');
   const catPlaceholders = config.categories.map(() => '?').join(',');
 
   // Global min/max for bar normalization (within the category)
@@ -103,10 +111,11 @@ export async function renderTableWidget(
 
   const rows = await query<Record<string, unknown>>(dataSql, [...config.categories, limit]);
 
-  // Columns: brand, product, then numeric columns
+  // Columns: brand, product, optional category, then numeric columns
   const allCols = [
     { key: 'brand_label', label: t('explore.col.brand'), numeric: false },
     { key: 'product_name', label: t('explore.col.product'), numeric: false },
+    ...(showCategory ? [{ key: 'category_primary', label: t('explore.col.category'), numeric: false }] : []),
     ...numericKeys.map((k) => ({ key: k, label: tAxis(k), numeric: true })),
   ];
 
@@ -114,7 +123,7 @@ export async function renderTableWidget(
 
   const theadHtml = allCols.map((col) => {
     const isSort = col.key === config.sort;
-    return `<th>${escHtml(col.label)}${isSort ? ` <span class="sort-arrow active">${sortArrow}</span>` : ''}</th>`;
+    return `<th>${formatUnitCasing(escHtml(col.label))}${isSort ? ` <span class="sort-arrow active">${sortArrow}</span>` : ''}</th>`;
   }).join('') + `<th>${t('explore.col.compare')}</th><th>${t('explore.col.search')}</th>`;
 
   const tbodyHtml = rows.map((r) => `

@@ -173,6 +173,32 @@ const SECTIONS: HomeSection[] = [
       staticChart: true,
     },
   },
+  // 13. Headphone + IEM: Price vs FR Harman Std Dev
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_harman_std',
+    config: {
+      id: 'price-harman-std',
+      categories: ['headphone', 'iem'],
+      x: 'price_anchor_usd',
+      y: 'perf_fr_harman_std_db',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 14. Table: Headphone + IEM, FR Harman Std Dev ascending
+  {
+    type: 'table',
+    descKey: 'home.section.top_hp_harman_std',
+    config: {
+      id: 'top-hp-harman-std',
+      categories: ['headphone', 'iem'],
+      sort: 'perf_fr_harman_std_db',
+      sortDir: 'asc',
+      limit: 10,
+      columns: ['category_primary', 'perf_fr_harman_std_db', 'price_anchor_usd'],
+    },
+  },
 ];
 
 /** Build a hash link to the Analysis tab matching this scatter config */

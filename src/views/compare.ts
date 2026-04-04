@@ -1,3 +1,4 @@
+import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
 import { getCategoryLabel, getScaleForField, computeBarPercent } from '../presets';
 import { t, getLocale } from '../i18n';
@@ -39,9 +40,11 @@ function getCompareFields() {
       if (n > 1000) return parseFloat((n / 1000).toPrecision(3)).toString() + ' kg';
       return n.toFixed(0) + ' g';
     } },
-    { key: 'driver_total_count', labelKey: 'compare.field.driver_count', format: (v: unknown) => v ?? '—' },
+    { key: 'driver_total_count', labelKey: 'compare.field.driver_count', format: (v: unknown) => v != null ? String(Math.round(Number(v))) : '—' },
     { key: 'spec_freq_low_hz', labelKey: 'compare.field.freq_low', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
     { key: 'spec_freq_high_hz', labelKey: 'compare.field.freq_high', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
+    { key: 'perf_fr_harman_std_db', labelKey: 'compare.field.fr_harman_std', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'perf_fr_harman_avg_db', labelKey: 'compare.field.fr_harman_avg', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'crossover_freqs_hz_json', labelKey: 'compare.field.crossover', format: (v: unknown) => {
       if (v == null) return '—';
       try {
@@ -203,7 +206,24 @@ export async function renderCompare(
       globalRange[k] = { min: globalStats[`min_${k}`], max: globalStats[`max_${k}`] };
     }
 
-    contentEl.innerHTML = `
+    // ── FR chart ──
+    const frProductIds = ordered
+      .filter((r) => r.has_fr_data === 1)
+      .map((r) => r.product_id as string);
+
+    let frHtml = '';
+    if (frProductIds.length > 0) {
+      frHtml = `
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-body">
+            <h3 style="margin:0 0 0.5rem">${t('compare.fr.title')}</h3>
+            <div id="compare-fr-plot" style="width:100%;height:400px"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    contentEl.innerHTML = frHtml + `
       <div class="card">
         <div class="card-body compare-scroll">
           <div class="compare-grid" style="grid-template-columns: 180px repeat(${ordered.length}, minmax(160px, 1fr))">
@@ -214,7 +234,7 @@ export async function renderCompare(
                 <br/><button class="remove-compare" data-id="${r.product_id}" style="font-size:0.7rem;margin-top:0.25rem">${t('common.remove')}</button>
               </div>
             `).join('')}
-            ${compareFields.map((f) => {
+            ${compareFields.filter((f) => ordered.some((r) => r[f.key] != null)).map((f) => {
               const range = globalRange[f.key];
               const scale = getScaleForField(f.key);
               return `
@@ -247,6 +267,74 @@ export async function renderCompare(
         </div>
       </div>
     `;
+
+    // ── Render FR plot ──
+    if (frProductIds.length > 0) {
+      const frPlaceholders = frProductIds.map(() => '?').join(',');
+      const frRows = await query<{ product_id: string; series_type: string; points_json: string }>(
+        `SELECT product_id, series_type, points_json FROM web_fr_data WHERE product_id IN (${frPlaceholders})`,
+        frProductIds,
+      );
+
+      const TRACE_COLORS = ['#7c3aed', '#db2777', '#2563eb', '#059669', '#d97706'];
+      const traces: Data[] = [];
+
+      for (let i = 0; i < ordered.length; i++) {
+        const pid = ordered[i].product_id as string;
+        const fr = frRows.find((r) => r.product_id === pid && r.series_type === 'raw')
+          ?? frRows.find((r) => r.product_id === pid);
+        if (!fr) continue;
+        const points: [number, number][] = JSON.parse(fr.points_json);
+        traces.push({
+          x: points.map((p) => p[0]),
+          y: points.map((p) => p[1]),
+          type: 'scatter',
+          mode: 'lines',
+          name: `${ordered[i].brand_label} ${ordered[i].product_name}`,
+          line: { color: TRACE_COLORS[i % TRACE_COLORS.length], width: 1.5 },
+          hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
+        });
+      }
+
+      if (traces.length > 0) {
+        const baseFontPx = 16;
+        const currentFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize || `${baseFontPx}`);
+        const fontScale = Number.isFinite(currentFontPx) ? currentFontPx / baseFontPx : 1.25;
+
+        const layout: Partial<Layout> = {
+          xaxis: {
+            title: { text: t('compare.fr.xaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: '#374151' }, standoff: 10 * fontScale },
+            type: 'log',
+            gridcolor: '#eee',
+            zerolinecolor: '#ddd',
+          },
+          yaxis: {
+            title: { text: t('compare.fr.yaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: '#374151' }, standoff: 10 * fontScale },
+            gridcolor: '#eee',
+            zerolinecolor: '#ddd',
+          },
+          paper_bgcolor: 'transparent',
+          plot_bgcolor: '#fff',
+          font: { family: 'Inter, sans-serif', size: 12 * fontScale },
+          margin: { l: 60 * fontScale, r: 20 * fontScale, t: 10 * fontScale, b: 55 * fontScale },
+          legend: {
+            orientation: 'h',
+            y: -0.2,
+            font: { size: 11 * fontScale },
+          },
+          hovermode: 'x unified',
+        };
+
+        const plotConfig: Partial<Config> = {
+          responsive: true,
+          displayModeBar: true,
+          modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+          displaylogo: false,
+        };
+
+        await Plotly.react('compare-fr-plot', traces, layout, plotConfig);
+      }
+    }
 
     // Populate source URL cells asynchronously
     for (const r of ordered) {
