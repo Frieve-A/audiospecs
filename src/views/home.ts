@@ -1,84 +1,274 @@
-import { query } from '../db/database';
-import { PRESETS, getCategoryLabel, getPresetPurpose } from '../presets';
-import { navigate } from '../router';
 import { t } from '../i18n';
+import type { ScatterWidgetConfig } from '../components/scatter-widget';
+import type { TableWidgetConfig } from '../components/table-widget';
+
+interface ScatterSection {
+  type: 'scatter';
+  descKey: string;
+  config: ScatterWidgetConfig;
+}
+
+interface TableSection {
+  type: 'table';
+  descKey: string;
+  config: TableWidgetConfig;
+}
+
+type HomeSection = ScatterSection | TableSection;
+
+const SECTIONS: HomeSection[] = [
+  // 1. DAC + Headphone Amp: Price vs SINAD, category color
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_sinad',
+    config: {
+      id: 'price-sinad',
+      categories: ['dac', 'headphone_amp'],
+      x: 'price_anchor_usd',
+      y: 'perf_sinad_db',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 2. DAC + Headphone Amp: Release Year vs SINAD, category color
+  {
+    type: 'scatter',
+    descKey: 'home.section.year_sinad',
+    config: {
+      id: 'year-sinad',
+      categories: ['dac', 'headphone_amp'],
+      x: 'release_year',
+      y: 'perf_sinad_db',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 3. Table: Headphone Amp, SINAD descending
+  {
+    type: 'table',
+    descKey: 'home.section.top_amp_sinad',
+    config: {
+      id: 'top-amp-sinad',
+      categories: ['headphone_amp'],
+      sort: 'perf_sinad_db',
+      sortDir: 'desc',
+      limit: 10,
+      columns: ['perf_sinad_db', 'price_anchor_usd'],
+    },
+  },
+  // 4. Table: DAC, SINAD descending
+  {
+    type: 'table',
+    descKey: 'home.section.top_dac_sinad',
+    config: {
+      id: 'top-dac-sinad',
+      categories: ['dac'],
+      sort: 'perf_sinad_db',
+      sortDir: 'desc',
+      limit: 10,
+      columns: ['perf_sinad_db', 'price_anchor_usd'],
+    },
+  },
+  // 5. DAC + Headphone Amp: Price vs SNR, category color
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_snr',
+    config: {
+      id: 'price-snr',
+      categories: ['dac', 'headphone_amp'],
+      x: 'price_anchor_usd',
+      y: 'perf_snr_db',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 6. DAC + Headphone Amp: Release Year vs SNR, category color
+  {
+    type: 'scatter',
+    descKey: 'home.section.year_snr',
+    config: {
+      id: 'year-snr',
+      categories: ['dac', 'headphone_amp'],
+      x: 'release_year',
+      y: 'perf_snr_db',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 7. All categories: Release Year vs Freq High, category color
+  {
+    type: 'scatter',
+    descKey: 'home.section.year_freq_high',
+    config: {
+      id: 'year-freq-high',
+      categories: ['headphone', 'iem', 'dac', 'headphone_amp', 'speaker'],
+      x: 'release_year',
+      y: 'spec_freq_high_hz',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 8. Headphone + IEM: Price vs Freq Low
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_freq_low_hp',
+    config: {
+      id: 'price-freq-low-hp',
+      categories: ['headphone', 'iem'],
+      x: 'price_anchor_usd',
+      y: 'spec_freq_low_hz',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 9. Speaker: Price vs Freq Low
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_freq_low_spk',
+    config: {
+      id: 'price-freq-low-spk',
+      categories: ['speaker'],
+      x: 'price_anchor_usd',
+      y: 'spec_freq_low_hz',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 10. Table: Speaker, Freq Low ascending
+  {
+    type: 'table',
+    descKey: 'home.section.top_spk_freq_low',
+    config: {
+      id: 'top-spk-freq-low',
+      categories: ['speaker'],
+      sort: 'spec_freq_low_hz',
+      sortDir: 'asc',
+      limit: 10,
+      columns: ['spec_freq_low_hz', 'price_anchor_usd'],
+    },
+  },
+  // 11. All categories: Price vs Weight, category color
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_weight',
+    config: {
+      id: 'price-weight',
+      categories: ['headphone', 'iem', 'dac', 'headphone_amp', 'speaker'],
+      x: 'price_anchor_usd',
+      y: 'spec_weight_g',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 12. IEM: Price vs Driver Count
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_drivers',
+    config: {
+      id: 'price-drivers',
+      categories: ['iem'],
+      x: 'price_anchor_usd',
+      y: 'driver_total_count',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+];
+
+/** Build a hash link to the Analysis tab matching this scatter config */
+function scatterLink(config: ScatterWidgetConfig): string {
+  const p = new URLSearchParams();
+  p.set('cat', config.categories.join(','));
+  p.set('x', config.x);
+  p.set('y', config.y);
+  p.set('color', config.color);
+  return `#/analysis?${p.toString()}`;
+}
+
+/** Build a hash link to the Explore tab matching this table config */
+function tableLink(config: TableWidgetConfig): string {
+  const p = new URLSearchParams();
+  if (config.categories.length === 1) {
+    p.set('cat', config.categories[0]);
+  }
+  p.set('sort', `${config.sort}:${config.sortDir}`);
+  p.set('cols', config.columns.join(','));
+  return `#/explore?${p.toString()}`;
+}
 
 export async function renderHome(container: HTMLElement): Promise<void> {
+  const sectionsHtml = SECTIONS.map((sec, i) => {
+    const linkHref = sec.type === 'scatter'
+      ? scatterLink(sec.config)
+      : tableLink(sec.config);
+    const linkLabel = sec.type === 'scatter'
+      ? t('home.open_analysis')
+      : t('home.open_explore');
+
+    return `
+    <section class="home-widget-section" data-section-idx="${i}">
+      <div class="home-widget-header">
+        <p class="home-widget-desc">${t(sec.descKey)}</p>
+        <a class="home-widget-link" href="${linkHref}">${linkLabel} &rarr;</a>
+      </div>
+      <div class="home-widget-body">
+        <div class="home-widget-loading">
+          <div class="loading-spinner"></div>
+        </div>
+      </div>
+    </section>
+  `;
+  }).join('');
+
   container.innerHTML = `
     <div class="view-header">
       <h1>${t('home.title')}</h1>
       <p>${t('home.subtitle')}</p>
     </div>
-    <div class="stats-grid" id="home-stats"></div>
-    <div class="card" style="margin-bottom:1.5rem">
-      <div class="card-header">${t('home.card.category_dist')}</div>
-      <div class="card-body" id="home-categories"></div>
-    </div>
-    <div class="card">
-      <div class="card-header">${t('home.card.quick_analysis')}</div>
-      <div class="card-body" id="home-presets"></div>
+    <div class="home-sections">
+      ${sectionsHtml}
     </div>
   `;
 
-  const [manifest] = await query<{ value: string }>(
-    "SELECT value FROM web_manifest WHERE key = 'product_count'",
-  );
-  const [brandCount] = await query<{ cnt: number }>(
-    'SELECT COUNT(*) as cnt FROM web_brand_summary',
-  );
-  const [perfCount] = await query<{ cnt: number }>(
-    'SELECT COUNT(*) as cnt FROM web_product_core WHERE has_perf_data = 1',
-  );
-  const [priceCount] = await query<{ cnt: number }>(
-    "SELECT COUNT(*) as cnt FROM web_product_core WHERE coalesce(street_price_usd, msrp_usd) IS NOT NULL",
-  );
-  const catDist = await query<{ category_primary: string; cnt: number }>(
-    'SELECT category_primary, COUNT(*) as cnt FROM web_product_core GROUP BY category_primary ORDER BY cnt DESC',
+  // Lazy-render each section when it enters the viewport
+  const rendered = new Set<number>();
+
+  async function renderSection(idx: number): Promise<void> {
+    if (rendered.has(idx)) return;
+    rendered.add(idx);
+
+    const sec = SECTIONS[idx];
+    const sectionEl = container.querySelector<HTMLElement>(`[data-section-idx="${idx}"]`);
+    if (!sectionEl) return;
+    const bodyEl = sectionEl.querySelector<HTMLElement>('.home-widget-body')!;
+
+    try {
+      if (sec.type === 'scatter') {
+        const { renderScatterWidget } = await import('../components/scatter-widget');
+        await renderScatterWidget(bodyEl, sec.config);
+      } else {
+        const { renderTableWidget } = await import('../components/table-widget');
+        await renderTableWidget(bodyEl, sec.config);
+      }
+    } catch (err) {
+      console.error(`Failed to render home section ${idx}:`, err);
+      bodyEl.innerHTML = '';
+    }
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        observer.unobserve(entry.target);
+        const idx = parseInt((entry.target as HTMLElement).dataset.sectionIdx!, 10);
+        renderSection(idx);
+      }
+    },
+    { rootMargin: '300px' },
   );
 
-  const statsEl = document.getElementById('home-stats')!;
-  const totalProducts = manifest ? Number(manifest.value) : 0;
-  statsEl.innerHTML = `
-    <div class="stat-card"><div class="stat-value">${totalProducts.toLocaleString()}</div><div class="stat-label">${t('home.stat.products')}</div></div>
-    <div class="stat-card"><div class="stat-value">${brandCount.cnt}</div><div class="stat-label">${t('home.stat.brands')}</div></div>
-    <div class="stat-card"><div class="stat-value">${perfCount.cnt}</div><div class="stat-label">${t('home.stat.with_perf')}</div></div>
-    <div class="stat-card"><div class="stat-value">${priceCount.cnt}</div><div class="stat-label">${t('home.stat.with_price')}</div></div>
-  `;
-
-  const catEl = document.getElementById('home-categories')!;
-  catEl.innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;gap:0.75rem">
-      ${catDist.map((c) => `
-        <div class="stat-card" style="min-width:150px;cursor:pointer" data-cat="${c.category_primary}">
-          <div class="stat-value">${c.cnt}</div>
-          <div class="stat-label">${getCategoryLabel(c.category_primary)}</div>
-        </div>
-      `).join('')}
-    </div>
-  `;
-  catEl.querySelectorAll('[data-cat]').forEach((el) => {
-    el.addEventListener('click', () => {
-      navigate('explore', { cat: (el as HTMLElement).dataset.cat! });
-    });
-  });
-
-  const presetsEl = document.getElementById('home-presets')!;
-  const featured = PRESETS.slice(0, 6);
-  presetsEl.innerHTML = `
-    <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
-      ${featured.map((p) => {
-        const purpose = getPresetPurpose(p);
-        return `
-        <button class="preset-btn" data-preset="${p.id}" title="${purpose}">
-          ${purpose}
-        </button>
-      `;
-      }).join('')}
-    </div>
-  `;
-  presetsEl.querySelectorAll('[data-preset]').forEach((el) => {
-    el.addEventListener('click', () => {
-      navigate('analysis', { preset: (el as HTMLElement).dataset.preset! });
-    });
+  container.querySelectorAll<HTMLElement>('[data-section-idx]').forEach((el) => {
+    observer.observe(el);
   });
 }

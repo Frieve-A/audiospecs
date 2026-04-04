@@ -526,6 +526,17 @@ button.primary:hover {
   background: var(--accent-hover);
 }
 
+button.danger {
+  background: #c06060;
+  color: #fff;
+  border-color: #c06060;
+}
+
+button.danger:hover {
+  background: #a85050;
+  border-color: #a85050;
+}
+
 /* ── Table ── */
 .data-table-wrap {
   overflow-x: auto;
@@ -540,6 +551,7 @@ button.primary:hover {
 /* Add inner spacing now that card-body padding is removed for this block. */
 #explore-table {
   margin: 0.75rem 1.25rem 1.0rem;
+  width: calc(100% - 2.5rem);
 }
 
 table.data-table {
@@ -610,6 +622,33 @@ table.data-table .numeric {
   position: sticky;
   background: var(--bg-card);
   z-index: 3;
+}
+
+#explore-table th.fixed-col[data-col="brand_label"],
+#explore-table td.fixed-col[data-col="brand_label"] {
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+#explore-table th.fixed-col[data-col="product_name"],
+#explore-table td.fixed-col[data-col="product_name"] {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+#explore-table th[data-col="category_primary"],
+#explore-table td[data-col="category_primary"] {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 #explore-table th.fixed-col {
@@ -849,12 +888,34 @@ table.data-table .numeric {
 .quality-medium { color: var(--warning); }
 .quality-low { color: var(--danger); }
 
+/* ── Action columns (compare / search) — compact width ── */
+#explore-table th.col-action,
+#explore-table td.col-action {
+  white-space: nowrap;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  text-align: center;
+}
+
+/* Compare column: single button — shrink to fit */
+#explore-table td.col-action:not(.search-icons),
+#explore-table th.col-action:first-of-type {
+  width: 1px;
+}
+
+/* Search column: fit exactly two buttons + gap */
+#explore-table td.col-action.search-icons,
+#explore-table th.col-action:last-of-type {
+  width: calc(2rem * 2 + 0.29rem + 0.35rem * 2);
+}
+
 /* ── Search icon buttons (explore table) ── */
 .search-icons {
   display: flex;
   gap: 0.29rem;
   align-items: center;
 }
+.compare-add,
 .search-icons button {
   display: inline-flex;
   align-items: center;
@@ -994,4 +1055,78 @@ table.data-table .numeric {
 td[data-product-id][data-col],
 .compare-cell[data-product-id][data-col] {
   cursor: context-menu;
+}
+
+/* ── Home widget sections ── */
+.home-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.home-widget-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.home-widget-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.home-widget-desc {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.home-widget-link {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 0.25rem 0.5rem;
+  background: #5b82b8;
+  border: 1px solid #5b82b8;
+  border-radius: var(--radius);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.home-widget-link:hover {
+  background: #4c7099;
+  border-color: #4c7099;
+  color: #fff;
+}
+
+.home-widget-body {
+  min-height: 100px;
+}
+
+.home-widget-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+}
+
+.home-widget-loading .loading-spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/* Widget table: no fixed-column / scroll constraints — show all rows inline */
+.widget-table-wrap {
+  overflow-x: auto;
+  padding: 0;
+}
+
+.widget-table-wrap table.data-table {
+  margin: 0.75rem 1.25rem 1rem;
+  width: calc(100% - 2.5rem);
 }

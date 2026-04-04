@@ -48,6 +48,9 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
   const withPerf = await query<{ cnt: number }>(
     "SELECT COUNT(*) as cnt FROM web_product_core WHERE has_perf_data = 1",
   );
+  const brandCount = await query<{ cnt: number }>(
+    'SELECT COUNT(*) as cnt FROM web_brand_summary',
+  );
 
   contentEl.innerHTML = `
     <div class="about-page">
@@ -63,6 +66,10 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
           <div class="stat-card">
             <div class="stat-value">${totalProducts[0]?.cnt || 0}</div>
             <div class="stat-label">${t('about.stat.products')}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${brandCount[0]?.cnt ?? 0}</div>
+            <div class="stat-label">${t('about.stat.brands')}</div>
           </div>
           <div class="stat-card">
             <div class="stat-value">${withPrice[0]?.cnt || 0}</div>

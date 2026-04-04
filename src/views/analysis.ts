@@ -73,7 +73,7 @@ export async function renderAnalysis(
     <div class="controls-bar" id="analysis-controls"></div>
     <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
       <div id="analysis-presets" class="preset-bar" style="flex:1;margin-bottom:0"></div>
-      <button id="analysis-reset">${t('common.reset')}</button>
+      <button id="analysis-reset" class="danger">${t('common.reset')}</button>
     </div>
     <div id="analysis-warning"></div>
     <div class="scatter-container">
@@ -295,13 +295,14 @@ export async function renderAnalysis(
       const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
       const top = sorted.slice(0, 12);
       const rest = sorted.slice(12).flatMap(([, v]) => v);
-      traces = top.map(([name, data]) => { traceRows.push(data); return makeTrace(name, data, xAxis, yAxis); });
+      traces = top.map(([name, data]) => { traceRows.push(data); const displayName = colorField === 'category_primary' ? getCategoryLabel(name) : name; return makeTrace(displayName, data, xAxis, yAxis); });
       if (rest.length) { traceRows.push(rest); traces.push(makeTrace('Other', rest, xAxis, yAxis, '#999')); }
     } else {
       traces = [...groups.entries()].map(([name, data]) => {
         traceRows.push(data);
         const color = colorField === 'category_primary' ? CATEGORY_COLORS[name] : undefined;
-        return makeTrace(name, data, xAxis, yAxis, color);
+        const displayName = colorField === 'category_primary' ? getCategoryLabel(name) : name;
+        return makeTrace(displayName, data, xAxis, yAxis, color);
       });
     }
 
