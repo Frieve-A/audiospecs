@@ -188,6 +188,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'about.book.intro': 'A scientific introduction to audio for informed product selection (free e-book)',
     'about.book.title': 'The End and Rebirth of Audio: Deconstruction and Reconstruction of Audio through Pure Reason',
     'about.book.url': 'https://deuslibri.com/book/the-end-and-rebirth-of-audio/en',
+    'about.review.intro': 'Objective meta-review site for audio products',
+    'about.review.title': 'Frieve - Audio Review',
+    'about.review.url': 'https://audioreview.frieve.com/',
     'about.link.website': 'Frieve Web Site',
     'about.link.support': 'Support This Project',
 
@@ -419,6 +422,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'about.book.intro': '失敗しないオーディオ製品選びのための科学的オーディオ入門書（無料電子書籍）',
     'about.book.title': 'オーディオの終焉と再生 ― 純粋理性による音響の解体と再構築',
     'about.book.url': 'https://deuslibri.com/book/the-end-and-rebirth-of-audio/ja',
+    'about.review.intro': 'オーディオ製品の客観的メタレビューサイト',
+    'about.review.title': 'Frieve - Audio Review',
+    'about.review.url': 'https://audioreview.frieve.com/',
     'about.link.website': 'FrieveのWebサイトへ',
     'about.link.support': 'プロジェクトを支援する',
 

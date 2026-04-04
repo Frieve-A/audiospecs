@@ -156,6 +156,10 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
           <p class="about-links-caption">${t('about.book.intro')}</p>
           <a class="about-links-book-link" href="${t('about.book.url')}" target="_blank">${t('about.book.title')}</a>
         </div>
+        <div class="about-links-book">
+          <p class="about-links-caption">${t('about.review.intro')}</p>
+          <a class="about-links-book-link" href="${t('about.review.url')}" target="_blank">${t('about.review.title')}</a>
+        </div>
         <hr class="about-links-divider" />
         <div class="about-links-row">
           <a class="about-links-item" href="https://www.frieve.com" target="_blank">${t('about.link.website')}</a>
