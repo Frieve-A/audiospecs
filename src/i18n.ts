@@ -9,6 +9,11 @@ const translations: Record<Locale, Record<string, string>> = {
   en: {
     // Page title
     'page.title': 'Frieve - AudioSpecs — Audio Equipment Database',
+    'page.title.home': 'Home — Frieve - AudioSpecs',
+    'page.title.analysis': 'Analysis — Frieve - AudioSpecs',
+    'page.title.explore': 'Explore — Frieve - AudioSpecs',
+    'page.title.compare': 'Compare — Frieve - AudioSpecs',
+    'page.title.about': 'About — Frieve - AudioSpecs',
 
     // Nav
     'nav.logo': 'Frieve - AudioSpecs',
@@ -58,11 +63,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'home.card.quick_analysis': 'Quick Analysis',
     'home.open_analysis': 'Open in Analysis',
     'home.open_explore': 'Open in Explore',
-    'home.section.price_sinad': 'In recent upstream audio products, price has very little impact on performance. Even ultra-low-cost products provide SINAD more than 10 times above the hearing threshold.',
+    'home.section.price_sinad': 'In recent upstream audio products, price has very little impact on performance. Even ultra-low-cost products provide SINAD more than 10 times above the hearing threshold.<br><small>* SINAD (Signal-to-Noise and Distortion ratio) measures the ratio of the output signal power to the combined power of noise and distortion, expressed in dB. Higher values indicate more faithful reproduction of the original audio.</small>',
     'home.section.year_sinad': 'Recent DAC and headphone amp SINAD has reached 120dB, which is about 1/100th of the hearing threshold.',
     'home.section.top_amp_sinad': 'Headphone amps with the highest SINAD',
     'home.section.top_dac_sinad': 'DACs with the highest SINAD',
-    'home.section.price_snr': 'In recent upstream audio products, price has very little impact on performance. Even ultra-low-cost products provide SNR more than 10 times above the hearing threshold.',
+    'home.section.price_snr': 'In recent upstream audio products, price has very little impact on performance. Even ultra-low-cost products provide SNR more than 10 times above the hearing threshold.<br><small>* SNR (Signal-to-Noise Ratio) measures the ratio of the output signal power to the noise floor, expressed in dB. Unlike SINAD, which accounts for both noise and distortion, SNR evaluates noise alone. Higher values indicate cleaner audio with a quieter background.</small>',
     'home.section.year_snr': 'Recent DAC and headphone amp SNR has exceeded 130dB, which is about 1/100th of the hearing threshold.',
     'home.section.year_freq_high': 'Some recent audio products claim an upper frequency limit of 100kHz, which is 5 times the hearing threshold.',
     'home.section.price_freq_low_hp': 'Most headphones and IEMs achieve reproduction down to the 20Hz hearing threshold regardless of price.',
@@ -243,6 +248,11 @@ const translations: Record<Locale, Record<string, string>> = {
   ja: {
     // Page title
     'page.title': 'Frieve - AudioSpecs — オーディオ機器データベース',
+    'page.title.home': 'ホーム — Frieve - AudioSpecs',
+    'page.title.analysis': '分析 — Frieve - AudioSpecs',
+    'page.title.explore': '一覧 — Frieve - AudioSpecs',
+    'page.title.compare': '比較 — Frieve - AudioSpecs',
+    'page.title.about': '当サイトについて — Frieve - AudioSpecs',
 
     // Nav
     'nav.logo': 'Frieve - AudioSpecs',
@@ -292,11 +302,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'home.card.quick_analysis': 'クイック分析',
     'home.open_analysis': '分析タブで開く',
     'home.open_explore': '一覧タブで開く',
-    'home.section.price_sinad': '近年上流のオーディオ製品では、価格の性能に与える影響はとても小さくなっています。超低価格品でも聴覚限界を10倍以上上回るSINADを提供しています。',
+    'home.section.price_sinad': '近年上流のオーディオ製品では、価格の性能に与える影響はとても小さくなっています。超低価格品でも聴覚限界を10倍以上上回るSINADを提供しています。<br><small>※ SINAD（Signal-to-Noise and Distortion ratio）は、信号対雑音歪比の略で、出力信号の強さを雑音と歪みの合計で割った比率をdBで表したものです。値が高いほど原音に忠実な再生が可能であることを示します。</small>',
     'home.section.year_sinad': '近年のDAC、ヘッドホンアンプのSINADは120dBに達しており、これは聴覚限界の約1/100です。',
     'home.section.top_amp_sinad': '特にSINADの高いヘッドホンアンプ',
     'home.section.top_dac_sinad': '特にSINADの高いDAC',
-    'home.section.price_snr': '近年上流のオーディオ製品では、価格の性能に与える影響はとても小さくなっています。超低価格品でも聴覚限界を10倍以上上回るSNRを提供しています。',
+    'home.section.price_snr': '近年上流のオーディオ製品では、価格の性能に与える影響はとても小さくなっています。超低価格品でも聴覚限界を10倍以上上回るSNRを提供しています。<br><small>※ SNR（Signal-to-Noise Ratio）は、信号対雑音比の略で、出力信号の強さをノイズ（雑音）の強さで割った比率をdBで表したものです。SINADが歪みも含めた総合指標であるのに対し、SNRはノイズのみを評価します。値が高いほど静寂な背景の中で音声を再生できることを示します。</small>',
     'home.section.year_snr': '近年のDAC、ヘッドホンアンプのSNRは130dB以上に達しており、これは聴覚限界の約1/100です。',
     'home.section.year_freq_high': '近年のオーディオ製品の中には再生周波数上限は100kHzを主張するものが登場しており、これは聴覚限界の5倍です。',
     'home.section.price_freq_low_hp': 'ヘッドホン、IEMの再生周波数下限は価格によらず聴覚限界の20Hzまでの再生を実現している製品がほとんどです。',

@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    gtag?: (...args: unknown[]) => void;
+  }
+}
+
 import './style.css';
 import { initDatabase } from './db/database';
 import { onRouteChange, type Route, type RouteInfo } from './router';
@@ -152,6 +158,20 @@ async function main(): Promise<void> {
     if (routeKey === currentRoute) return;
     currentRoute = routeKey;
     lastRouteInfo = info;
+
+    // Update page title per route
+    const titleKey = `page.title.${info.route}`;
+    document.title = t(titleKey) || t('page.title');
+
+    // Send GA4 page_view for hash-based navigation
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'page_view', {
+        page_title: document.title,
+        page_location: window.location.href,
+        page_path: `/${info.route}`,
+      });
+    }
+
     await renderCurrentRoute();
   });
 }

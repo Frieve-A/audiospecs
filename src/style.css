@@ -1083,6 +1083,15 @@ td[data-product-id][data-col],
   line-height: 1.6;
 }
 
+.home-widget-desc small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--text-tertiary, var(--text-secondary));
+  font-size: 0.78rem;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
 .home-widget-link {
   flex-shrink: 0;
   font-size: 0.8125rem;
