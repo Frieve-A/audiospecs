@@ -295,7 +295,7 @@ export async function renderAnalysis(
       const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
       const top = sorted.slice(0, 12);
       const rest = sorted.slice(12).flatMap(([, v]) => v);
-      traces = top.map(([name, data]) => { traceRows.push(data); const displayName = colorField === 'category_primary' ? getCategoryLabel(name) : name; return makeTrace(displayName, data, xAxis, yAxis); });
+      traces = top.map(([name, data]) => { traceRows.push(data); return makeTrace(name, data, xAxis, yAxis); });
       if (rest.length) { traceRows.push(rest); traces.push(makeTrace('Other', rest, xAxis, yAxis, '#999')); }
     } else {
       traces = [...groups.entries()].map(([name, data]) => {
