@@ -1,6 +1,6 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, type Preset } from '../presets';
+import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, computeParetoFrontier, type Preset } from '../presets';
 import { t, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { columnToPatterns, fetchSourceUrls } from '../sources';
@@ -304,6 +304,23 @@ export async function renderAnalysis(
         const displayName = colorField === 'category_primary' ? getCategoryLabel(name) : name;
         return makeTrace(displayName, data, xAxis, yAxis, color);
       });
+    }
+
+    // Pareto frontier trace (inserted before data traces so it renders behind)
+    const pareto = computeParetoFrontier(rows, xAxis, yAxis);
+    if (pareto) {
+      traces.unshift({
+        x: pareto.map((p) => p.x),
+        y: pareto.map((p) => p.y),
+        mode: 'lines',
+        type: 'scatter',
+        name: 'Pareto',
+        line: { color: 'rgba(180,180,180,0.45)', width: 2, dash: 'dot' },
+        hoverinfo: 'skip',
+        showlegend: false,
+      } as Data);
+      // Shift traceRows indices to match (insert empty entry at front)
+      traceRows.unshift([]);
     }
 
     const xLabel = getAxisLabel(xAxis);

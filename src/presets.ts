@@ -250,3 +250,99 @@ export function buildBetterAnnotations(
 
   return annotations;
 }
+
+/**
+ * Compute Pareto-optimal frontier points from scatter data.
+ * Only applicable when both axes have a defined `better` direction.
+ * Returns sorted {x, y} pairs for drawing the frontier line, or null if not applicable.
+ */
+export function computeParetoFrontier(
+  rows: Array<{ x_val: number; y_val: number }>,
+  xAxis: AxisDef,
+  yAxis: AxisDef,
+): Array<{ x: number; y: number }> | null {
+  if (!xAxis.better || !yAxis.better || rows.length < 2) return null;
+
+  // Convert to maximisation: negate if "lower is better"
+  const xSign = xAxis.better === 'higher' ? 1 : -1;
+  const ySign = yAxis.better === 'higher' ? 1 : -1;
+
+  // Build converted points
+  const pts = rows.map((r) => ({
+    ox: r.x_val,
+    oy: r.y_val,
+    cx: r.x_val * xSign,
+    cy: r.y_val * ySign,
+  }));
+
+  // Sort by converted x descending, then converted y descending
+  pts.sort((a, b) => b.cx - a.cx || b.cy - a.cy);
+
+  // Sweep: keep points whose converted y is a new maximum
+  const frontier: Array<{ x: number; y: number }> = [];
+  let maxCy = -Infinity;
+  for (const p of pts) {
+    if (p.cy >= maxCy) {
+      frontier.push({ x: p.ox, y: p.oy });
+      maxCy = p.cy;
+    }
+  }
+
+  if (frontier.length < 2) return null;
+
+  // Sort by original x for drawing
+  frontier.sort((a, b) => a.x - b.x);
+
+  // Expand to staircase with corners that always dent toward the non-better
+  // (worse) side, so the boundary clearly shows the Pareto-optimal region.
+  const xBetterLower = xAxis.better === 'lower';
+  const steps: Array<{ x: number; y: number }> = [frontier[0]];
+  for (let i = 1; i < frontier.length; i++) {
+    const prev = frontier[i - 1];
+    const cur = frontier[i];
+    if (xBetterLower) {
+      // Corner at (cur.x, prev.y): dents toward higher-x / lower-y (worse side)
+      steps.push({ x: cur.x, y: prev.y });
+    } else {
+      // Corner at (prev.x, cur.y): dents toward lower-x / lower-y (worse side)
+      steps.push({ x: prev.x, y: cur.y });
+    }
+    steps.push(cur);
+  }
+
+  // Extend the staircase to graph edges in the WORSE (non-better) direction,
+  // so the full boundary of "cross this → Pareto updates" is visible.
+  function edgeValue(vals: number[], scale: 'log' | 'linear' | 'year', toward: 'min' | 'max'): number {
+    const lo = Math.min(...vals);
+    const hi = Math.max(...vals);
+    if (scale === 'log' && lo > 0) {
+      const logLo = Math.log10(lo);
+      const logHi = Math.log10(hi);
+      const m = (logHi - logLo) * 0.15 || 0.5;
+      return toward === 'min' ? 10 ** (logLo - m) : 10 ** (logHi + m);
+    }
+    const m = (hi - lo) * 0.15 || 1;
+    return toward === 'min' ? lo - m : hi + m;
+  }
+
+  const allX = rows.map((r) => r.x_val);
+  const allY = rows.map((r) => r.y_val);
+  // Worse edge = opposite of better
+  const xWorseEdge = edgeValue(allX, xAxis.scale, xAxis.better === 'lower' ? 'max' : 'min');
+  const yWorseEdge = edgeValue(allY, yAxis.scale, yAxis.better === 'lower' ? 'max' : 'min');
+
+  const first = frontier[0];
+  const last = frontier[frontier.length - 1];
+
+  if (xBetterLower) {
+    // first has best X (lowest), last has best Y
+    steps.unshift({ x: first.x, y: yWorseEdge });   // extend first toward worse Y
+    steps.push({ x: xWorseEdge, y: last.y });        // extend last toward worse X
+  } else {
+    // last has best X (highest), first has best Y
+    steps.unshift({ x: xWorseEdge, y: first.y });    // extend first toward worse X
+    steps.push({ x: last.x, y: yWorseEdge });        // extend last toward worse Y
+  }
+
+  return steps;
+}
