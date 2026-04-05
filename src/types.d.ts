@@ -39,6 +39,7 @@ declare module 'plotly.js-dist-min' {
       config?: Partial<Config>,
     ): Promise<void>;
     purge(el: string | HTMLElement): void;
+    relayout(el: string | HTMLElement, update: Record<string, unknown>): Promise<void>;
   };
 
   interface Data {
@@ -79,6 +80,7 @@ declare module 'plotly.js-dist-min' {
       y?: number;
       font?: { size?: number };
     };
+    annotations?: Record<string, unknown>[];
     hovermode?: string;
     [key: string]: unknown;
   }

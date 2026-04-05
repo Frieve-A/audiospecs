@@ -163,6 +163,7 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
         <hr class="about-links-divider" />
         <div class="about-links-row">
           <a class="about-links-item" href="https://www.frieve.com" target="_blank">${t('about.link.website')}</a>
+          <a class="about-links-item" href="https://github.com/Frieve-A/audiospecs" target="_blank">${t('about.link.github')}</a>
           <a class="about-links-item" href="https://ko-fi.com/frievea" target="_blank">${t('about.link.support')}</a>
         </div>
       </section>

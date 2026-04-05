@@ -352,7 +352,73 @@ export async function renderAnalysis(
       displaylogo: false,
     };
 
+    // Correlation coefficient R annotation
+    const rAnnotation = {
+      xref: 'paper' as const,
+      yref: 'paper' as const,
+      x: 0.99,
+      y: 0.99,
+      xanchor: 'right' as const,
+      yanchor: 'top' as const,
+      showarrow: false,
+      font: { size: 13 * fontScale, color: '#555', family: 'Inter, sans-serif' },
+      bgcolor: 'rgba(255,255,255,0.8)',
+      borderpad: 4,
+      text: '',
+    };
+
+    const xAx = xAxis;
+    const yAx = yAxis;
+    function updateRAnnotation(visibleIndices?: Set<number>): void {
+      const visibleRows = visibleIndices
+        ? traceRows.filter((_, i) => visibleIndices.has(i)).flat()
+        : rows;
+      const r = calcCorrelation(visibleRows, xAx, yAx);
+      rAnnotation.text = r !== null ? `R = ${r.toFixed(3)}` : '';
+      layout.annotations = rAnnotation.text ? [rAnnotation] : [];
+    }
+
+    updateRAnnotation();
     await Plotly.react('scatter-plot', traces, layout, config);
+
+    // Predict visibility state after legend click/doubleclick, then update R
+    type PlotlyGd = HTMLElement & { data?: Array<{ visible?: boolean | 'legendonly' }> };
+    function getVisibility(): boolean[] {
+      const gd2 = plotEl as PlotlyGd;
+      if (!gd2.data) return [];
+      return gd2.data.map((tr) => tr.visible !== false && tr.visible !== 'legendonly');
+    }
+
+    function recalcRWith(visible: Set<number>): void {
+      updateRAnnotation(visible);
+      Plotly.relayout('scatter-plot', { annotations: layout.annotations || [] });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gd = plotEl as any;
+    gd.on('plotly_legendclick', (evt: { curveNumber: number }) => {
+      const cur = getVisibility();
+      cur[evt.curveNumber] = !cur[evt.curveNumber];
+      const visible = new Set<number>();
+      cur.forEach((v, i) => { if (v) visible.add(i); });
+      setTimeout(() => recalcRWith(visible), 0);
+    });
+    gd.on('plotly_legenddoubleclick', (evt: { curveNumber: number }) => {
+      const cur = getVisibility();
+      const allVisible = cur.every(Boolean);
+      const onlyThisVisible = cur.every((v, i) => v === (i === evt.curveNumber));
+      const visible = new Set<number>();
+      if (onlyThisVisible || allVisible) {
+        if (onlyThisVisible) {
+          cur.forEach((_, i) => visible.add(i));
+        } else {
+          visible.add(evt.curveNumber);
+        }
+      } else {
+        visible.add(evt.curveNumber);
+      }
+      setTimeout(() => recalcRWith(visible), 0);
+    });
   }
 
   // ── Context menu ──
@@ -508,6 +574,31 @@ export async function renderAnalysis(
   renderPresets();
   syncUrl();
   await renderPlot();
+}
+
+function calcCorrelation(
+  rows: Array<{ x_val: number; y_val: number }>,
+  xAxis: { scale: string },
+  yAxis: { scale: string },
+): number | null {
+  if (rows.length < 3) return null;
+  const pairs: [number, number][] = [];
+  for (const r of rows) {
+    let x = r.x_val;
+    let y = r.y_val;
+    if (xAxis.scale === 'log') { if (x <= 0) continue; x = Math.log10(x); }
+    if (yAxis.scale === 'log') { if (y <= 0) continue; y = Math.log10(y); }
+    pairs.push([x, y]);
+  }
+  if (pairs.length < 3) return null;
+  const n = pairs.length;
+  let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+  for (const [x, y] of pairs) {
+    sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
+  }
+  const denom = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+  if (denom === 0) return null;
+  return (n * sxy - sx * sy) / denom;
 }
 
 interface AxisInfo {

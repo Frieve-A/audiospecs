@@ -206,6 +206,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'about.review.title': 'Frieve - Audio Review',
     'about.review.url': 'https://audioreview.frieve.com/',
     'about.link.website': 'Frieve Web Site',
+    'about.link.github': 'GitHub',
     'about.link.support': 'Support This Project',
 
     // Axes
@@ -460,6 +461,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'about.review.title': 'Frieve - Audio Review',
     'about.review.url': 'https://audioreview.frieve.com/',
     'about.link.website': 'FrieveのWebサイトへ',
+    'about.link.github': 'GitHub',
     'about.link.support': 'プロジェクトを支援する',
 
     // Axes
