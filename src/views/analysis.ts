@@ -60,6 +60,9 @@ export async function renderAnalysis(
     if (currentKeyword) s.keyword = currentKeyword;
     if (currentLabels) s.labels = '1';
     if (currentLabelsPareto) s.labelsPareto = '1';
+    if (!currentShowCorrelation) s.showCorrelation = '0';
+    if (!currentShowPareto) s.showPareto = '0';
+    if (!currentShowBetter) s.showBetter = '0';
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }
 
@@ -105,6 +108,9 @@ export async function renderAnalysis(
   let currentKeyword = keywordParam;
   let currentLabels = (params.get('labels') || stored.labels || '') === '1';
   let currentLabelsPareto = (params.get('labelsPareto') || stored.labelsPareto || '') === '1';
+  let currentShowCorrelation = (params.get('showCorrelation') || stored.showCorrelation || '1') !== '0';
+  let currentShowPareto = (params.get('showPareto') || stored.showPareto || '1') !== '0';
+  let currentShowBetter = (params.get('showBetter') || stored.showBetter || '1') !== '0';
 
   function syncUrl(): void {
     const p: Record<string, string> = {};
@@ -116,6 +122,9 @@ export async function renderAnalysis(
     if (currentKeyword) p.keyword = currentKeyword;
     if (currentLabels) p.labels = '1';
     if (currentLabelsPareto) p.labelsPareto = '1';
+    if (!currentShowCorrelation) p.showCorrelation = '0';
+    if (!currentShowPareto) p.showPareto = '0';
+    if (!currentShowBetter) p.showBetter = '0';
     const qs = '?' + new URLSearchParams(p).toString();
     history.replaceState(null, '', `#/analysis${qs}`);
     saveState();
@@ -178,6 +187,23 @@ export async function renderAnalysis(
                style="min-width:260px">
       </div>
       <div class="control-group">
+        <label>${t('analysis.label.option')}</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-show-correlation" ${currentShowCorrelation ? 'checked' : ''}>
+            ${t('analysis.label.show_correlation')}
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-show-pareto" ${currentShowPareto ? 'checked' : ''}>
+            ${t('analysis.label.show_pareto')}
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-show-better" ${currentShowBetter ? 'checked' : ''}>
+            ${t('analysis.label.show_better')}
+          </label>
+        </div>
+      </div>
+      <div class="control-group">
         <label>${t('analysis.label.labels')}</label>
         <div class="checkbox-group">
           <label class="checkbox-label">
@@ -231,6 +257,24 @@ export async function renderAnalysis(
         syncUrl();
         renderPlot();
       }, 300);
+    });
+
+    document.getElementById('chk-show-correlation')!.addEventListener('change', (e) => {
+      currentShowCorrelation = (e.target as HTMLInputElement).checked;
+      syncUrl();
+      renderPlot();
+    });
+
+    document.getElementById('chk-show-pareto')!.addEventListener('change', (e) => {
+      currentShowPareto = (e.target as HTMLInputElement).checked;
+      syncUrl();
+      renderPlot();
+    });
+
+    document.getElementById('chk-show-better')!.addEventListener('change', (e) => {
+      currentShowBetter = (e.target as HTMLInputElement).checked;
+      syncUrl();
+      renderPlot();
     });
 
     document.getElementById('chk-labels')!.addEventListener('change', (e) => {
@@ -376,7 +420,7 @@ export async function renderAnalysis(
         return makeTrace(displayName, data, xAxis, yAxis, color, currentLabels, paretoSet);
       });
     }
-    if (pareto) {
+    if (pareto && currentShowPareto) {
       traces.unshift({
         x: pareto.map((p) => p.x),
         y: pareto.map((p) => p.y),
@@ -457,14 +501,18 @@ export async function renderAnalysis(
     const yAx = yAxis;
     const betterAnnotations = buildBetterAnnotations(xAxis, yAxis, fontScale);
     function updateRAnnotation(visibleIndices?: Set<number>): void {
-      const visibleRows = visibleIndices
-        ? traceRows.filter((_, i) => visibleIndices.has(i)).flat()
-        : rows;
-      const r = calcCorrelation(visibleRows, xAx, yAx);
-      rAnnotation.text = r !== null ? `R = ${r.toFixed(3)}` : '';
+      if (currentShowCorrelation) {
+        const visibleRows = visibleIndices
+          ? traceRows.filter((_, i) => visibleIndices.has(i)).flat()
+          : rows;
+        const r = calcCorrelation(visibleRows, xAx, yAx);
+        rAnnotation.text = r !== null ? `R = ${r.toFixed(3)}` : '';
+      } else {
+        rAnnotation.text = '';
+      }
       layout.annotations = [
         ...(rAnnotation.text ? [rAnnotation] : []),
-        ...betterAnnotations,
+        ...(currentShowBetter ? betterAnnotations : []),
       ];
     }
 
@@ -658,6 +706,9 @@ export async function renderAnalysis(
     currentKeyword = '';
     currentLabels = false;
     currentLabelsPareto = false;
+    currentShowCorrelation = true;
+    currentShowPareto = true;
+    currentShowBetter = true;
     syncUrl();
     await renderControls();
     renderPresets();

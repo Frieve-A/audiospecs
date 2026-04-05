@@ -312,17 +312,10 @@ export function computeParetoFrontier(
 
   // Extend the staircase to graph edges in the WORSE (non-better) direction,
   // so the full boundary of "cross this → Pareto updates" is visible.
-  function edgeValue(vals: number[], scale: 'log' | 'linear' | 'year', toward: 'min' | 'max'): number {
-    const lo = Math.min(...vals);
-    const hi = Math.max(...vals);
-    if (scale === 'log' && lo > 0) {
-      const logLo = Math.log10(lo);
-      const logHi = Math.log10(hi);
-      const m = (logHi - logLo) * 0.15 || 0.5;
-      return toward === 'min' ? 10 ** (logLo - m) : 10 ** (logHi + m);
-    }
-    const m = (hi - lo) * 0.15 || 1;
-    return toward === 'min' ? lo - m : hi + m;
+  function edgeValue(vals: number[], _scale: 'log' | 'linear' | 'year', toward: 'min' | 'max'): number {
+    // Use actual data min/max so the Pareto line does not push Plotly's
+    // autorange beyond the real data extent.
+    return toward === 'min' ? Math.min(...vals) : Math.max(...vals);
   }
 
   const allX = rows.map((r) => r.x_val);
