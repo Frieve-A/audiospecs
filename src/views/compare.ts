@@ -313,7 +313,7 @@ export async function renderCompare(
             gridcolor: '#eee',
             zerolinecolor: '#ddd',
           },
-          paper_bgcolor: 'transparent',
+          paper_bgcolor: '#fff',
           plot_bgcolor: '#fff',
           font: { family: 'Inter, sans-serif', size: 12 * fontScale },
           margin: { l: 60 * fontScale, r: 20 * fontScale, t: 10 * fontScale, b: 55 * fontScale },
@@ -330,6 +330,7 @@ export async function renderCompare(
           displayModeBar: true,
           modeBarButtonsToRemove: ['lasso2d', 'select2d'],
           displaylogo: false,
+          toImageButtonOptions: { scale: 2 },
         };
 
         await Plotly.react('compare-fr-plot', traces, layout, plotConfig);

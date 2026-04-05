@@ -57,13 +57,19 @@ export async function renderAnalysis(
       color: currentColor,
     };
     if (selectedCats.length) s.cat = selectedCats.join(',');
+    if (currentKeyword) s.keyword = currentKeyword;
+    if (currentLabels) s.labels = '1';
+    if (currentLabelsPareto) s.labelsPareto = '1';
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }
 
   // Merge: URL params > sessionStorage > defaults
-  const stored = loadStoredState();
+  // If URL has explicit params, use only URL values (don't mix with stale session state)
+  const hasUrlParams = params.toString().length > 0;
+  const stored = hasUrlParams ? {} as Record<string, string> : loadStoredState();
   const presetId = params.get('preset') || stored.preset || 'msrp_vs_sinad';
   const catParam = params.get('cat') || stored.cat || '';
+  const keywordParam = params.get('keyword') || stored.keyword || '';
 
   container.innerHTML = `
     <div class="view-header">
@@ -96,6 +102,9 @@ export async function renderAnalysis(
   let currentX = params.get('x') || stored.x || currentPreset?.x || 'price_anchor_usd';
   let currentY = params.get('y') || stored.y || currentPreset?.y || 'perf_sinad_db';
   let currentColor = params.get('color') || stored.color || currentPreset?.color || 'category_primary';
+  let currentKeyword = keywordParam;
+  let currentLabels = (params.get('labels') || stored.labels || '') === '1';
+  let currentLabelsPareto = (params.get('labelsPareto') || stored.labelsPareto || '') === '1';
 
   function syncUrl(): void {
     const p: Record<string, string> = {};
@@ -104,6 +113,9 @@ export async function renderAnalysis(
     p.y = currentY;
     p.color = currentColor;
     if (selectedCats.length) p.cat = selectedCats.join(',');
+    if (currentKeyword) p.keyword = currentKeyword;
+    if (currentLabels) p.labels = '1';
+    if (currentLabelsPareto) p.labelsPareto = '1';
     const qs = '?' + new URLSearchParams(p).toString();
     history.replaceState(null, '', `#/analysis${qs}`);
     saveState();
@@ -158,6 +170,26 @@ export async function renderAnalysis(
           <option value="brand_name_en" ${currentColor === 'brand_name_en' ? 'selected' : ''}>${t('analysis.color.brand')}</option>
         </select>
       </div>
+      <div class="controls-break"></div>
+      <div class="control-group">
+        <label>${t('analysis.label.keyword')}</label>
+        <input type="text" id="input-keyword" value="${currentKeyword.replace(/"/g, '&quot;')}"
+               placeholder="${t('analysis.label.keyword_placeholder')}"
+               style="min-width:260px">
+      </div>
+      <div class="control-group">
+        <label>${t('analysis.label.labels')}</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-labels" ${currentLabels ? 'checked' : ''}>
+            ${t('analysis.label.show_labels')}
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-labels-pareto" ${currentLabelsPareto ? 'checked' : ''}${currentLabels ? '' : ' disabled'}>
+            ${t('analysis.label.labels_pareto_only')}
+          </label>
+        </div>
+      </div>
     `;
 
     document.getElementById('sel-cat')!.addEventListener('change', (e) => {
@@ -187,6 +219,30 @@ export async function renderAnalysis(
     });
     document.getElementById('sel-color')!.addEventListener('change', (e) => {
       currentColor = (e.target as HTMLSelectElement).value;
+      syncUrl();
+      renderPlot();
+    });
+
+    let keywordTimer: ReturnType<typeof setTimeout> | null = null;
+    document.getElementById('input-keyword')!.addEventListener('input', (e) => {
+      if (keywordTimer) clearTimeout(keywordTimer);
+      keywordTimer = setTimeout(() => {
+        currentKeyword = (e.target as HTMLInputElement).value.trim();
+        syncUrl();
+        renderPlot();
+      }, 300);
+    });
+
+    document.getElementById('chk-labels')!.addEventListener('change', (e) => {
+      currentLabels = (e.target as HTMLInputElement).checked;
+      const paretoChk = document.getElementById('chk-labels-pareto') as HTMLInputElement;
+      paretoChk.disabled = !currentLabels;
+      syncUrl();
+      renderPlot();
+    });
+
+    document.getElementById('chk-labels-pareto')!.addEventListener('change', (e) => {
+      currentLabelsPareto = (e.target as HTMLInputElement).checked;
       syncUrl();
       renderPlot();
     });
@@ -266,7 +322,16 @@ export async function renderAnalysis(
         AND y_val IS NOT NULL
     `;
 
-    const rows = await query<RowType>(sql, cats);
+    let rows = await query<RowType>(sql, cats);
+
+    // Filter by keyword if set
+    if (currentKeyword) {
+      const kw = currentKeyword.toLowerCase();
+      rows = rows.filter((r) =>
+        r.brand_label.toLowerCase().includes(kw) ||
+        r.product_name.toLowerCase().includes(kw),
+      );
+    }
 
     // Show warning if few points
     if (rows.length < 10) {
@@ -288,6 +353,12 @@ export async function renderAnalysis(
       groups.get(key)!.push(row);
     }
 
+    // Compute Pareto frontier (used for both the frontier line and pareto-only labels)
+    const pareto = computeParetoFrontier(rows, xAxis, yAxis);
+    const paretoSet: Set<string> | null = (currentLabels && currentLabelsPareto && pareto)
+      ? new Set(pareto.map((p) => `${p.x},${p.y}`))
+      : null;
+
     // Limit brand colors to top N, rest as "Other"
     let traces: Data[];
     traceRows = [];
@@ -295,19 +366,16 @@ export async function renderAnalysis(
       const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
       const top = sorted.slice(0, 12);
       const rest = sorted.slice(12).flatMap(([, v]) => v);
-      traces = top.map(([name, data]) => { traceRows.push(data); return makeTrace(name, data, xAxis, yAxis); });
-      if (rest.length) { traceRows.push(rest); traces.push(makeTrace('Other', rest, xAxis, yAxis, '#999')); }
+      traces = top.map(([name, data]) => { traceRows.push(data); return makeTrace(name, data, xAxis, yAxis, undefined, currentLabels, paretoSet); });
+      if (rest.length) { traceRows.push(rest); traces.push(makeTrace('Other', rest, xAxis, yAxis, '#999', currentLabels, paretoSet)); }
     } else {
       traces = [...groups.entries()].map(([name, data]) => {
         traceRows.push(data);
         const color = colorField === 'category_primary' ? CATEGORY_COLORS[name] : undefined;
         const displayName = colorField === 'category_primary' ? getCategoryLabel(name) : name;
-        return makeTrace(displayName, data, xAxis, yAxis, color);
+        return makeTrace(displayName, data, xAxis, yAxis, color, currentLabels, paretoSet);
       });
     }
-
-    // Pareto frontier trace (inserted before data traces so it renders behind)
-    const pareto = computeParetoFrontier(rows, xAxis, yAxis);
     if (pareto) {
       traces.unshift({
         x: pareto.map((p) => p.x),
@@ -350,7 +418,7 @@ export async function renderAnalysis(
         gridcolor: '#eee',
         zerolinecolor: '#ddd',
       },
-      paper_bgcolor: 'transparent',
+      paper_bgcolor: '#fff',
       plot_bgcolor: '#fff',
       font: { family: 'Inter, sans-serif', size: 12 * fontScale },
       margin: { l: 70 * fontScale, r: 20 * fontScale, t: 20 * fontScale, b: 55 * fontScale },
@@ -367,6 +435,7 @@ export async function renderAnalysis(
       displayModeBar: true,
       modeBarButtonsToRemove: ['lasso2d', 'select2d'],
       displaylogo: false,
+      toImageButtonOptions: { scale: 2 },
     };
 
     // Correlation coefficient R annotation
@@ -400,7 +469,8 @@ export async function renderAnalysis(
     }
 
     updateRAnnotation();
-    await Plotly.react('scatter-plot', traces, layout, config);
+    Plotly.purge('scatter-plot');
+    await Plotly.newPlot('scatter-plot', traces, layout, config);
 
     // Predict visibility state after legend click/doubleclick, then update R
     type PlotlyGd = HTMLElement & { data?: Array<{ visible?: boolean | 'legendonly' }> };
@@ -585,6 +655,9 @@ export async function renderAnalysis(
     currentY = currentPreset?.y || 'perf_sinad_db';
     currentColor = currentPreset?.color || 'category_primary';
     selectedCats = [];
+    currentKeyword = '';
+    currentLabels = false;
+    currentLabelsPareto = false;
     syncUrl();
     await renderControls();
     renderPresets();
@@ -640,13 +713,26 @@ function makeTrace(
   xAxis: AxisInfo,
   yAxis: AxisInfo,
   color?: string,
+  showLabels?: boolean,
+  paretoSet?: Set<string> | null,
 ): Data {
   const xLabel = getAxisLabel(xAxis as import('../presets').AxisDef);
   const yLabel = getAxisLabel(yAxis as import('../presets').AxisDef);
+  const hoverTexts = data.map((d) => {
+    const isPriceAxis = xAxis.id === 'price_anchor_usd' || xAxis.id === 'msrp_usd'
+      || yAxis.id === 'price_anchor_usd' || yAxis.id === 'msrp_usd';
+    let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val, yAxis)}`;
+    if (!isPriceAxis) {
+      tip += `<br>${t('common.price')}: ${d.price_anchor_usd ? '$' + d.price_anchor_usd.toLocaleString() : t('common.na')}`;
+    }
+    return tip;
+  });
+  // When paretoSet is provided, only show labels for Pareto-optimal points
+  const hasAnyLabel = showLabels && (!paretoSet || data.some((d) => paretoSet.has(`${d.x_val},${d.y_val}`)));
   return {
     x: data.map((d) => d.x_val),
     y: data.map((d) => d.y_val),
-    mode: 'markers',
+    mode: hasAnyLabel ? 'markers+text' : 'markers',
     type: 'scatter',
     name,
     marker: {
@@ -654,15 +740,16 @@ function makeTrace(
       opacity: 0.75,
       ...(color ? { color } : {}),
     },
-    text: data.map((d) => {
-      const isPriceAxis = xAxis.id === 'price_anchor_usd' || xAxis.id === 'msrp_usd'
-        || yAxis.id === 'price_anchor_usd' || yAxis.id === 'msrp_usd';
-      let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val, yAxis)}`;
-      if (!isPriceAxis) {
-        tip += `<br>${t('common.price')}: ${d.price_anchor_usd ? '$' + d.price_anchor_usd.toLocaleString() : t('common.na')}`;
-      }
-      return tip;
-    }),
+    hovertext: hoverTexts,
     hoverinfo: 'text',
+    ...(hasAnyLabel ? {
+      text: data.map((d) =>
+        paretoSet && !paretoSet.has(`${d.x_val},${d.y_val}`) ? '' : d.product_name,
+      ),
+      textposition: 'top center',
+      textfont: { size: 11 },
+    } : {
+      text: hoverTexts,
+    }),
   } as Data;
 }

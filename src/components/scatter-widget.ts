@@ -190,7 +190,7 @@ export async function renderScatterWidget(
       zerolinecolor: '#ddd',
       ...(isStatic ? { fixedrange: true } : {}),
     },
-    paper_bgcolor: 'transparent',
+    paper_bgcolor: '#fff',
     plot_bgcolor: '#fff',
     font: { family: 'Inter, sans-serif', size: 12 * fontScale },
     margin: { l: 70 * fontScale, r: 20 * fontScale, t: 20 * fontScale, b: 55 * fontScale },
@@ -209,6 +209,7 @@ export async function renderScatterWidget(
     ...(isStatic ? {} : { modeBarButtonsToRemove: ['lasso2d', 'select2d'] }),
     displaylogo: false,
     scrollZoom: isStatic ? false : undefined,
+    toImageButtonOptions: { scale: 2 },
   };
 
   const rAnnotation = {
