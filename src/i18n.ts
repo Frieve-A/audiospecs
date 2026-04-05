@@ -41,6 +41,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'common.share.copied': 'URL copied to clipboard!',
     'common.share.failed': 'Failed to copy URL',
     'common.reset': 'Reset',
+    'common.better': 'Better',
 
     // Categories
     'cat.headphone': 'Headphone',
@@ -296,6 +297,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'common.share.copied': 'URLをクリップボードにコピーしました！',
     'common.share.failed': 'URLのコピーに失敗しました',
     'common.reset': 'リセット',
+    'common.better': 'Better',
 
     // Categories
     'cat.headphone': 'ヘッドホン',

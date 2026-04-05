@@ -1,4 +1,4 @@
-import { tAxis, tCat, tPreset } from './i18n';
+import { t, tAxis, tCat, tPreset } from './i18n';
 
 export interface AxisDef {
   id: string;
@@ -6,6 +6,8 @@ export interface AxisDef {
   /** Use getAxisLabel() for display; this is the English fallback */
   label: string;
   scale: 'log' | 'linear' | 'year';
+  /** Which direction is "better" for this metric, or undefined if neutral/context-dependent */
+  better?: 'higher' | 'lower';
 }
 
 /** Minimum number of non-null data points required to show an axis in the dropdown */
@@ -23,26 +25,26 @@ export interface Preset {
 
 export const AXES: AxisDef[] = [
   // Price / time
-  { id: 'price_anchor_usd', source: "coalesce(street_price_usd, msrp_usd)", label: 'Price (USD)', scale: 'log' },
-  { id: 'msrp_usd', source: 'msrp_usd', label: 'MSRP', scale: 'log' },
-  { id: 'release_year', source: 'release_year', label: 'Release Year', scale: 'year' },
+  { id: 'price_anchor_usd', source: "coalesce(street_price_usd, msrp_usd)", label: 'Price (USD)', scale: 'log', better: 'lower' },
+  { id: 'msrp_usd', source: 'msrp_usd', label: 'MSRP', scale: 'log', better: 'lower' },
+  { id: 'release_year', source: 'release_year', label: 'Release Year', scale: 'year', better: 'higher' },
   // Perf
-  { id: 'perf_sinad_db', source: 'perf_sinad_db', label: 'SINAD (dB)', scale: 'linear' },
-  { id: 'perf_snr_db', source: 'perf_snr_db', label: 'SNR (dB)', scale: 'linear' },
-  { id: 'perf_thd_percent', source: 'perf_thd_percent', label: 'THD (%)', scale: 'log' },
-  { id: 'perf_dynamic_range_db', source: 'perf_dynamic_range_db', label: 'Dynamic Range (dB)', scale: 'linear' },
-  { id: 'perf_crosstalk_db', source: 'perf_crosstalk_db', label: 'Crosstalk (dB)', scale: 'linear' },
+  { id: 'perf_sinad_db', source: 'perf_sinad_db', label: 'SINAD (dB)', scale: 'linear', better: 'higher' },
+  { id: 'perf_snr_db', source: 'perf_snr_db', label: 'SNR (dB)', scale: 'linear', better: 'higher' },
+  { id: 'perf_thd_percent', source: 'perf_thd_percent', label: 'THD (%)', scale: 'log', better: 'lower' },
+  { id: 'perf_dynamic_range_db', source: 'perf_dynamic_range_db', label: 'Dynamic Range (dB)', scale: 'linear', better: 'higher' },
+  { id: 'perf_crosstalk_db', source: 'perf_crosstalk_db', label: 'Crosstalk (dB)', scale: 'linear', better: 'lower' },
   // Spec / Driveability
   { id: 'spec_impedance_ohm', source: 'spec_impedance_ohm', label: 'Impedance (Ω)', scale: 'log' },
-  { id: 'sensitivity_proxy_db', source: 'sensitivity_proxy_db', label: 'Sensitivity Proxy (dB)', scale: 'linear' },
-  { id: 'driveability_index', source: 'driveability_index', label: 'Driveability', scale: 'linear' },
-  { id: 'spec_weight_g', source: 'spec_weight_g', label: 'Weight (g)', scale: 'log' },
+  { id: 'sensitivity_proxy_db', source: 'sensitivity_proxy_db', label: 'Sensitivity Proxy (dB)', scale: 'linear', better: 'higher' },
+  { id: 'driveability_index', source: 'driveability_index', label: 'Driveability', scale: 'linear', better: 'higher' },
+  { id: 'spec_weight_g', source: 'spec_weight_g', label: 'Weight (g)', scale: 'log', better: 'lower' },
   { id: 'driver_total_count', source: 'driver_total_count', label: 'Driver Count', scale: 'linear' },
-  { id: 'spec_freq_low_hz', source: 'spec_freq_low_hz', label: 'Freq Low (Hz)', scale: 'log' },
-  { id: 'spec_freq_high_hz', source: 'spec_freq_high_hz', label: 'Freq High (Hz)', scale: 'log' },
+  { id: 'spec_freq_low_hz', source: 'spec_freq_low_hz', label: 'Freq Low (Hz)', scale: 'log', better: 'lower' },
+  { id: 'spec_freq_high_hz', source: 'spec_freq_high_hz', label: 'Freq High (Hz)', scale: 'log', better: 'higher' },
   // FR Harman (Headphone / IEM)
-  { id: 'perf_fr_harman_std_db', source: 'perf_fr_harman_std_db', label: 'FR Harman Std Dev (dB)', scale: 'linear' },
-  { id: 'perf_fr_harman_avg_db', source: 'perf_fr_harman_avg_db', label: 'FR Harman Avg Dev (dB)', scale: 'linear' },
+  { id: 'perf_fr_harman_std_db', source: 'perf_fr_harman_std_db', label: 'FR Harman Std Dev (dB)', scale: 'linear', better: 'lower' },
+  { id: 'perf_fr_harman_avg_db', source: 'perf_fr_harman_avg_db', label: 'FR Harman Avg Dev (dB)', scale: 'linear', better: 'lower' },
 ];
 
 export const PRESETS: Preset[] = [
@@ -199,3 +201,52 @@ export const CATEGORY_LABELS: Record<string, string> = {
   mic: 'Microphone',
   usb_interface: 'USB Interface',
 };
+
+/**
+ * Build Plotly annotations showing "Better →" / "← Better" at the axis edges.
+ * Placed just inside the plot area boundary to avoid overlapping tick labels.
+ * For y-axis, text is rotated -90° so ← visually points up and → points down.
+ */
+export function buildBetterAnnotations(
+  xAxis: AxisDef,
+  yAxis: AxisDef,
+  fontScale: number,
+): Array<Record<string, unknown>> {
+  const label = t('common.better');
+  const font = { size: 11 * fontScale, color: '#9ca3af', family: 'Inter, sans-serif' };
+  const annotations: Array<Record<string, unknown>> = [];
+
+  if (xAxis.better) {
+    const isRight = xAxis.better === 'higher';
+    annotations.push({
+      xref: 'paper',
+      yref: 'paper',
+      x: isRight ? 0.99 : 0.025,
+      y: 0.005,
+      xanchor: isRight ? 'right' : 'left',
+      yanchor: 'bottom',
+      showarrow: false,
+      text: isRight ? `${label} →` : `← ${label}`,
+      font,
+    });
+  }
+
+  if (yAxis.better) {
+    const isUp = yAxis.better === 'higher';
+    annotations.push({
+      xref: 'paper',
+      yref: 'paper',
+      x: 0.005,
+      y: isUp ? 0.99 : 0.05,
+      xanchor: 'left',
+      yanchor: isUp ? 'top' : 'bottom',
+      showarrow: false,
+      // Rotated -90°: → visually points up, ← visually points down
+      text: isUp ? `${label} →` : `← ${label}`,
+      font,
+      textangle: -90,
+    });
+  }
+
+  return annotations;
+}

@@ -1,6 +1,6 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { getAxis, getAxisLabel, getCategoryLabel, type AxisDef } from '../presets';
+import { getAxis, getAxisLabel, getCategoryLabel, buildBetterAnnotations, type AxisDef } from '../presets';
 import { t, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
@@ -210,13 +210,17 @@ export async function renderScatterWidget(
 
   const xAxisDef = xAxis;
   const yAxisDef = yAxis;
+  const betterAnnotations = buildBetterAnnotations(xAxis, yAxis, fontScale);
   function updateRAnnotation(visibleIndices?: Set<number>): void {
     const visibleRows = visibleIndices
       ? traceRows.filter((_, i) => visibleIndices.has(i)).flat()
       : rows;
     const r = calcCorrelation(visibleRows, xAxisDef, yAxisDef);
     rAnnotation.text = r !== null ? `R = ${r.toFixed(3)}` : '';
-    layout.annotations = rAnnotation.text ? [rAnnotation] : [];
+    layout.annotations = [
+      ...(rAnnotation.text ? [rAnnotation] : []),
+      ...betterAnnotations,
+    ];
   }
 
   updateRAnnotation();
