@@ -526,6 +526,7 @@ function formatNum(v: number, key: string): string {
   if (key === 'release_year') return String(v);
   if (key === 'spec_weight_g') return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + 'g';
   if (key === 'driver_total_count') return String(Math.round(v));
+  if (key === 'amp_output_impedance_ohm' && v === 0) return '≈0';
   return sig3(v);
 }
 

@@ -94,6 +94,31 @@ export function getAxis(id: string): AxisDef | undefined {
   return AXES.find((a) => a.id === id);
 }
 
+/** Axes whose 0 values should be clamped to a floor for log-scale display */
+const LOG_CLAMP_AXES: Record<string, number> = {
+  amp_output_impedance_ohm: 0.01,
+};
+
+/**
+ * Clamp 0 values to a display floor for specific log-scale axes.
+ * Plot coordinates use clamped x_val / y_val; original values are preserved
+ * in x_val_raw / y_val_raw for hover display.
+ */
+export function clampForScatter<T extends { x_val: number; y_val: number }>(
+  rows: T[], xAxisId: string, yAxisId: string,
+): (T & { x_val_raw: number; y_val_raw: number })[] {
+  const xFloor = LOG_CLAMP_AXES[xAxisId];
+  const yFloor = LOG_CLAMP_AXES[yAxisId];
+  return rows.map((r) => ({
+    ...r,
+    x_val_raw: r.x_val,
+    y_val_raw: r.y_val,
+    x_val: xFloor != null && r.x_val <= 0 ? xFloor : r.x_val,
+    y_val: yFloor != null && r.y_val <= 0 ? yFloor : r.y_val,
+  }));
+}
+
+
 /**
  * Return axes that have at least AXIS_MIN_POINTS non-null data points
  * across the given categories. Requires a query function to check the DB.
@@ -292,13 +317,13 @@ export function computeParetoFrontier(
   const frontier: Array<{ x: number; y: number }> = [];
   let maxCy = -Infinity;
   for (const p of pts) {
-    if (p.cy >= maxCy) {
+    if (p.cy > maxCy) {
       frontier.push({ x: p.ox, y: p.oy });
       maxCy = p.cy;
     }
   }
 
-  if (frontier.length < 2) return null;
+  if (frontier.length === 0) return null;
 
   // Sort by original x for drawing
   frontier.sort((a, b) => a.x - b.x);

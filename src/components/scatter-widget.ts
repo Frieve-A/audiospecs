@@ -1,6 +1,6 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { getAxis, getAxisLabel, getCategoryLabel, buildBetterAnnotations, computeParetoFrontier, type AxisDef } from '../presets';
+import { getAxis, getAxisLabel, getCategoryLabel, buildBetterAnnotations, computeParetoFrontier, clampForScatter, type AxisDef } from '../presets';
 import { t, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
@@ -18,7 +18,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 function fmtAxis(v: number, axis: { id?: string; scale: string }): string {
   if (axis.scale === 'year') return Math.round(v).toString();
-  if (v === 0) return '0';
+  if (v === 0) return axis.id === 'amp_output_impedance_ohm' ? '≈0' : '0';
   if (axis.id === 'spec_weight_g' && v > 1000) {
     return parseFloat((v / 1000).toPrecision(3)).toString() + ' kg';
   }
@@ -40,6 +40,8 @@ type RowType = {
   category_primary: string;
   x_val: number;
   y_val: number;
+  x_val_raw: number;
+  y_val_raw: number;
   brand_name_en: string;
   price_anchor_usd: number | null;
 };
@@ -107,7 +109,7 @@ export async function renderScatterWidget(
       AND y_val IS NOT NULL
   `;
 
-  const rows = await query<RowType>(sql, cats);
+  const rows = clampForScatter(await query<RowType>(sql, cats), config.x, config.y);
 
   const colorField = config.color as 'category_primary' | 'brand_name_en';
   const groups = new Map<string, RowType[]>();
@@ -216,6 +218,10 @@ export async function renderScatterWidget(
       font: { size: 11 * fontScale },
     },
     hovermode: 'closest',
+    hoverlabel: {
+      bordercolor: 'rgba(0,0,0,0.12)',
+      font: { family: 'Inter, sans-serif', size: 12 * fontScale, color: '#fff' },
+    },
     ...(isStatic ? { dragmode: false } : {}),
   };
 
@@ -471,7 +477,7 @@ function makeTrace(
     text: data.map((d) => {
       const isPriceAxis = xAxis.id === 'price_anchor_usd' || xAxis.id === 'msrp_usd'
         || yAxis.id === 'price_anchor_usd' || yAxis.id === 'msrp_usd';
-      let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val, yAxis)}`;
+      let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val_raw, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val_raw, yAxis)}`;
       if (!isPriceAxis) {
         tip += `<br>${t('common.price')}: ${d.price_anchor_usd ? '$' + d.price_anchor_usd.toLocaleString() : t('common.na')}`;
       }

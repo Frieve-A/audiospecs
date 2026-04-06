@@ -1389,3 +1389,16 @@ td[data-product-id][data-col],
   margin-bottom: 1rem;
   width: calc(100% - 1.5rem);
 }
+
+/* Plotly hover label: desaturate background, widen padding */
+.hoverlayer .hovertext rect {
+  filter: saturate(0.45) brightness(1.1);
+  rx: 4;
+  ry: 4;
+}
+.hoverlayer .hovertext {
+  transform-origin: center;
+}
+.hoverlayer .hovertext path {
+  filter: saturate(0.45) brightness(1.1);
+}

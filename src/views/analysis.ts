@@ -1,6 +1,6 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, computeParetoFrontier, type Preset } from '../presets';
+import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, computeParetoFrontier, clampForScatter, type Preset } from '../presets';
 import { t, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { columnToPatterns, fetchSourceUrls } from '../sources';
@@ -8,7 +8,7 @@ import { columnToPatterns, fetchSourceUrls } from '../sources';
 /** Format a number for tooltip display: 3 significant digits, but year axes stay as 4-digit integers */
 function fmtAxis(v: number, axis: { id?: string; scale: string }): string {
   if (axis.scale === 'year') return Math.round(v).toString();
-  if (v === 0) return '0';
+  if (v === 0) return axis.id === 'amp_output_impedance_ohm' ? '≈0' : '0';
   if (axis.id === 'spec_weight_g' && v > 1000) {
     return parseFloat((v / 1000).toPrecision(3)).toString() + ' kg';
   }
@@ -336,6 +336,8 @@ export async function renderAnalysis(
     category_primary: string;
     x_val: number;
     y_val: number;
+    x_val_raw: number;
+    y_val_raw: number;
     brand_name_en: string;
     price_anchor_usd: number | null;
   };
@@ -368,7 +370,7 @@ export async function renderAnalysis(
         AND y_val IS NOT NULL
     `;
 
-    let rows = await query<RowType>(sql, cats);
+    let rows = clampForScatter(await query<RowType>(sql, cats), currentX, currentY);
 
     // Filter by keyword if set
     if (currentKeyword) {
@@ -491,6 +493,10 @@ export async function renderAnalysis(
         font: { size: 11 * fontScale },
       },
       hovermode: 'closest',
+      hoverlabel: {
+        bordercolor: 'rgba(0,0,0,0.12)',
+        font: { family: 'Inter, sans-serif', size: 12 * fontScale, color: '#fff' },
+      },
     };
 
     const config: Partial<Config> = {
@@ -791,6 +797,8 @@ function makeTrace(
   data: Array<{
     x_val: number;
     y_val: number;
+    x_val_raw: number;
+    y_val_raw: number;
     brand_label: string;
     product_name: string;
     price_anchor_usd: number | null;
@@ -806,7 +814,7 @@ function makeTrace(
   const hoverTexts = data.map((d) => {
     const isPriceAxis = xAxis.id === 'price_anchor_usd' || xAxis.id === 'msrp_usd'
       || yAxis.id === 'price_anchor_usd' || yAxis.id === 'msrp_usd';
-    let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val, yAxis)}`;
+    let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val_raw, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val_raw, yAxis)}`;
     if (!isPriceAxis) {
       tip += `<br>${t('common.price')}: ${d.price_anchor_usd ? '$' + d.price_anchor_usd.toLocaleString() : t('common.na')}`;
     }

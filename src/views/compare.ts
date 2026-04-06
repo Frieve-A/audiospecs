@@ -50,7 +50,7 @@ function getCompareFields() {
     { key: 'amp_power_w', labelKey: 'compare.field.amp_power_w', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'amp_voltage_vrms', labelKey: 'compare.field.amp_voltage_vrms', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'amp_voltage_vrms_balanced', labelKey: 'compare.field.amp_voltage_vrms_balanced', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'amp_output_impedance_ohm', labelKey: 'compare.field.amp_output_impedance_ohm', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'amp_output_impedance_ohm', labelKey: 'compare.field.amp_output_impedance_ohm', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
     { key: 'crossover_freqs_hz_json', labelKey: 'compare.field.crossover', format: (v: unknown) => {
       if (v == null) return '—';
       try {
