@@ -27,7 +27,8 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
   app.innerHTML = `
     <nav class="main-nav">
       <div class="nav-inner">
-      <span class="logo"><img class="logo-icon" src="/assets/images/icon-64x64.png" alt="Frieve logo" />${t('nav.logo')}</span>
+      <a href="#/home" class="logo"><img class="logo-icon" src="/assets/images/icon-64x64.png" alt="Frieve logo" />${t('nav.logo')}</a>
+      <div class="nav-links" id="nav-links">
       ${NAV_ROUTES.map((route) => `<a href="#/${route}" data-route="${route}">${t(NAV_LABEL_KEYS[route])}</a>`).join('')}
       <div class="nav-spacer"></div>
       <button id="share-btn" class="share-btn" title="${t('common.share')}">
@@ -42,16 +43,57 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
         ${AVAILABLE_LOCALES.map((l) => `<option value="${l.code}" ${l.code === getLocale() ? 'selected' : ''}>${l.label}</option>`).join('')}
       </select>
       </div>
+      <div class="nav-toolbar">
+      <button class="share-btn" title="${t('common.share')}">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 8V13a1 1 0 001 1h6a1 1 0 001-1V8"/>
+          <polyline points="11 4 8 1 5 4"/>
+          <line x1="8" y1="1" x2="8" y2="10"/>
+        </svg>
+      </button>
+      <select class="locale-select">
+        ${AVAILABLE_LOCALES.map((l) => `<option value="${l.code}" ${l.code === getLocale() ? 'selected' : ''}>${l.label}</option>`).join('')}
+      </select>
+      </div>
+      <button id="nav-hamburger" class="nav-hamburger" aria-label="Menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      </div>
     </nav>
     <div id="share-toast" class="share-toast"></div>
     <main class="main-content" id="main-content"></main>
+    <footer class="main-footer">
+      <div class="footer-inner">
+        <a href="https://www.frieve.com" target="_blank">${t('about.link.website')}</a>
+        <a href="https://github.com/Frieve-A/audiospecs" target="_blank">${t('about.link.github')}</a>
+        <a href="https://ko-fi.com/frievea" target="_blank">${t('about.link.support')}</a>
+      </div>
+    </footer>
   `;
 
-  document.getElementById('locale-select')!.addEventListener('change', (e) => {
-    setLocale((e.target as HTMLSelectElement).value as 'en' | 'ja');
+  const hamburger = document.getElementById('nav-hamburger')!;
+  const navLinks = document.getElementById('nav-links')!;
+  hamburger.addEventListener('click', () => {
+    const expanded = navLinks.classList.toggle('open');
+    hamburger.classList.toggle('open', expanded);
+    hamburger.setAttribute('aria-expanded', String(expanded));
+  });
+  navLinks.querySelectorAll('a[data-route]').forEach((a) => {
+    a.addEventListener('click', () => {
+      navLinks.classList.remove('open');
+      hamburger.classList.remove('open');
+      hamburger.setAttribute('aria-expanded', 'false');
+    });
   });
 
-  document.getElementById('share-btn')!.addEventListener('click', async () => {
+  document.querySelectorAll('.locale-select').forEach((el) => {
+    el.addEventListener('change', (e) => {
+      setLocale((e.target as HTMLSelectElement).value as 'en' | 'ja');
+    });
+  });
+
+  document.querySelectorAll('.share-btn').forEach((el) => {
+    el.addEventListener('click', async () => {
     const url = window.location.href;
     const toast = document.getElementById('share-toast')!;
     try {
@@ -63,6 +105,7 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
       toast.classList.add('show');
     }
     setTimeout(() => toast.classList.remove('show'), 2000);
+    });
   });
 
   return {

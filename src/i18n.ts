@@ -54,7 +54,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'cat.usb_interface': 'USB Interface',
 
     // Home
-    'home.title': 'Frieve AudioSpecs',
+    'home.title': 'Frieve - AudioSpecs',
     'home.subtitle': 'Audio equipment database — browse, analyze, and compare specifications',
     'home.stat.products': 'Products',
     'home.stat.brands': 'Brands',
@@ -319,7 +319,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'cat.usb_interface': 'USBインターフェース',
 
     // Home
-    'home.title': 'Frieve AudioSpecs',
+    'home.title': 'Frieve - AudioSpecs',
     'home.subtitle': 'オーディオ機器データベース — スペックの閲覧・分析・比較',
     'home.stat.products': '製品数',
     'home.stat.brands': 'ブランド数',
