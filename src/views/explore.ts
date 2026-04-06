@@ -3,6 +3,7 @@ import { AXES, CATEGORY_KEYS, getCategoryLabel, getScaleForField, computeBarPerc
 import { navigate } from '../router';
 import { t, tAxis, getLocale } from '../i18n';
 import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss } from '../sources';
+import { setupColHelpTooltips } from '../components/col-help';
 
 interface ExploreState {
   search: string;
@@ -186,7 +187,10 @@ export async function renderExplore(
       const arrow = active ? (state.sortDir === 'asc' ? '↑' : '↓') : '↕';
       const label = formatUnitCasing(t(col.labelKey)).replace(/\n/g, '<br>');
       const fixedClass = FIXED_COLUMN_KEYS.has(col.key) ? 'fixed-col' : '';
-      return `<th data-col="${col.key}" class="${fixedClass}">${label} <span class="sort-arrow ${active ? 'active' : ''}">${arrow}</span></th>`;
+      const descKey = `axisdesc.${col.key}`;
+      const desc = col.numeric ? t(descKey) : '';
+      const helpIcon = desc ? `<span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
+      return `<th data-col="${col.key}" class="${fixedClass}">${label}${helpIcon} <span class="sort-arrow ${active ? 'active' : ''}">${arrow}</span></th>`;
     }).join('') + `<th class="col-action">${t('explore.col.compare')}</th><th class="col-action">${t('explore.col.search')}</th>`;
 
     theadEl.querySelectorAll('th[data-col]').forEach((th) => {
@@ -203,6 +207,9 @@ export async function renderExplore(
         loadData();
       });
     });
+
+    // Column help tooltips
+    setupColHelpTooltips(theadEl, document.getElementById('explore-table-wrap'));
   }
 
   // Pre-compute global min/max (unfiltered) for bar normalization — runs once for ALL numeric columns
@@ -531,3 +538,4 @@ function formatUnitCasing(s: string): string {
     .replace(/\(Hz\)/g, '(<span class="unit-case">Hz</span>)')
     .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)');
 }
+

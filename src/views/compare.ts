@@ -1,8 +1,9 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
 import { getCategoryLabel, getScaleForField, computeBarPercent } from '../presets';
-import { t, getLocale } from '../i18n';
+import { t, getLocale, tAxis } from '../i18n';
 import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss, fetchAllSourceUrls } from '../sources';
+import { setupColHelpTooltips } from '../components/col-help';
 
 let cleanupDocListener: (() => void) | null = null;
 
@@ -237,8 +238,12 @@ export async function renderCompare(
             ${compareFields.filter((f) => ordered.some((r) => r[f.key] != null)).map((f) => {
               const range = globalRange[f.key];
               const scale = getScaleForField(f.key);
+              const descKey = `axisdesc.${f.key}`;
+              const desc = t(descKey);
+              const hasDesc = desc !== descKey;
+              const helpIcon = hasDesc ? `<span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
               return `
-              <div class="compare-label">${formatUnitCasing(t(f.labelKey))}</div>
+              <div class="compare-label">${formatUnitCasing(t(f.labelKey))}${helpIcon}</div>
               ${ordered.map((r) => {
                 const v = r[f.key];
                 const pid = r.product_id as string;
@@ -336,6 +341,10 @@ export async function renderCompare(
         await Plotly.react('compare-fr-plot', traces, layout, plotConfig);
       }
     }
+
+    // Column help tooltips on compare labels
+    const compareScroll = contentEl.querySelector<HTMLElement>('.compare-scroll');
+    setupColHelpTooltips(contentEl, compareScroll);
 
     // Populate source URL cells asynchronously
     for (const r of ordered) {

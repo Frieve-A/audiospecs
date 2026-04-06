@@ -239,9 +239,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'axis.perf_fr_harman_avg_db': 'FR Harman Avg Dev (dB)',
 
     // Axis descriptions
-    'axisdesc.price_anchor_usd': 'Estimated street price or MSRP in USD. Log scale highlights relative price differences.',
+    'axisdesc.price_anchor_usd': 'Estimated street price or MSRP in USD. Whichever is available is used, with street price taking priority.',
     'axisdesc.msrp_usd': 'Manufacturer\'s suggested retail price. May differ from actual street price.',
-    'axisdesc.release_year': 'Year of product release. Useful for observing technology trends over time.',
+    'axisdesc.release_year': 'Year of product release or announcement.',
     'axisdesc.perf_sinad_db': 'Signal-to-Noise and Distortion ratio. Higher is better — indicates overall signal purity.',
     'axisdesc.perf_snr_db': 'Signal-to-Noise Ratio. Higher is better — measures background noise level.',
     'axisdesc.perf_thd_percent': 'Total Harmonic Distortion as a percentage. Lower is better — measures signal distortion.',
@@ -504,9 +504,9 @@ const translations: Record<Locale, Record<string, string>> = {
     'axis.perf_fr_harman_avg_db': 'FR Harman 平均偏差 (dB)',
 
     // Axis descriptions
-    'axisdesc.price_anchor_usd': '実売価格または定価（USD）。対数スケールで価格帯の相対差を可視化します。',
+    'axisdesc.price_anchor_usd': '実売価格または定価（USD）。実売価格を優先し、なければ定価を使用します。',
     'axisdesc.msrp_usd': 'メーカー希望小売価格。実売価格とは異なる場合があります。',
-    'axisdesc.release_year': '製品の発売年。技術トレンドの時系列変化を観察できます。',
+    'axisdesc.release_year': '製品の発売年または発表年。',
     'axisdesc.perf_sinad_db': '信号対雑音歪み比。高いほど良好 — 信号の純度を総合的に示します。',
     'axisdesc.perf_snr_db': '信号対雑音比。高いほど良好 — バックグラウンドノイズの少なさを示します。',
     'axisdesc.perf_thd_percent': '全高調波歪み率。低いほど良好 — 信号の歪みの少なさを示します。',
