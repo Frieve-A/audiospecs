@@ -25,7 +25,7 @@ function saveIds(ids: string[]): void {
 function getCompareFields() {
   return [
     { key: 'category_primary', labelKey: 'compare.field.category', format: (v: unknown) => getCategoryLabel(v as string) },
-    { key: 'price_anchor_usd', labelKey: 'compare.field.price', format: (v: unknown) => v != null ? '$' + Number(v).toLocaleString() : '—' },
+    { key: 'price_anchor_usd', labelKey: 'compare.field.price', format: (v: unknown) => v != null ? Math.round(Number(v)).toLocaleString() : '—' },
     { key: 'release_year', labelKey: 'compare.field.year', format: (v: unknown) => v ?? '—' },
     { key: 'perf_sinad_db', labelKey: 'compare.field.sinad', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'perf_snr_db', labelKey: 'compare.field.snr', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
@@ -38,16 +38,16 @@ function getCompareFields() {
     { key: 'spec_weight_g', labelKey: 'compare.field.weight', format: (v: unknown) => {
       if (v == null) return '—';
       const n = Number(v);
-      if (n > 1000) return parseFloat((n / 1000).toPrecision(3)).toString() + ' kg';
-      return n.toFixed(0) + ' g';
+      if (n >= 1000) return parseFloat((n / 1000).toPrecision(3)).toString() + 'k';
+      return sig3(n);
     } },
     { key: 'driver_total_count', labelKey: 'compare.field.driver_count', format: (v: unknown) => v != null ? String(Math.round(Number(v))) : '—' },
     { key: 'spec_freq_low_hz', labelKey: 'compare.field.freq_low', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
     { key: 'spec_freq_high_hz', labelKey: 'compare.field.freq_high', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
     { key: 'perf_fr_harman_std_db', labelKey: 'compare.field.fr_harman_std', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'perf_fr_harman_avg_db', labelKey: 'compare.field.fr_harman_avg', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'amp_power_mw_32ohm', labelKey: 'compare.field.amp_power_mw_32ohm', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'amp_power_w', labelKey: 'compare.field.amp_power_w', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'amp_power_mw_32ohm', labelKey: 'compare.field.amp_power_mw_32ohm', format: (v: unknown) => v != null ? (Number(v) >= 1000 ? parseFloat(Number(v).toPrecision(3)).toLocaleString() : sig3(Number(v))) : '—' },
+    { key: 'amp_power_w', labelKey: 'compare.field.amp_power_w', format: (v: unknown) => v != null ? (Number(v) >= 1000 ? parseFloat(Number(v).toPrecision(3)).toLocaleString() : sig3(Number(v))) : '—' },
     { key: 'amp_voltage_vrms', labelKey: 'compare.field.amp_voltage_vrms', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'amp_voltage_vrms_balanced', labelKey: 'compare.field.amp_voltage_vrms_balanced', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'amp_output_impedance_ohm', labelKey: 'compare.field.amp_output_impedance_ohm', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
@@ -92,12 +92,43 @@ export async function renderCompare(
         <input type="search" id="compare-search" placeholder="${t('compare.placeholder.search')}" style="width:100%"/>
         <div class="search-results" id="compare-results" style="display:none"></div>
       </div>
-      <div class="control-group" style="display:flex;align-items:flex-end;margin-left:auto">
+      <div class="control-group" style="display:flex;flex-direction:row;align-items:flex-end;margin-left:auto;gap:0.5rem">
+        <button id="compare-download" title="${t('common.download.tooltip')}">${t('common.download')}</button>
         <button id="compare-clear-all" class="danger">${t('common.clear_all')}</button>
       </div>
     </div>
     <div id="compare-content"></div>
   `;
+
+  // Download CSV button
+  document.getElementById('compare-download')!.addEventListener('click', async () => {
+    if (!ids.length) return;
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = await query<Record<string, unknown>>(
+      `SELECT
+        p.*,
+        coalesce(p.street_price_usd, p.msrp_usd) as price_anchor_usd,
+        CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label
+      FROM web_product_core p
+      WHERE p.product_id IN (${placeholders})`,
+      ids,
+    );
+    const ordered = ids.map((id) => rows.find((r) => r.product_id === id)).filter(Boolean) as Record<string, unknown>[];
+    const compareFields = getCompareFields();
+    // Transposed layout matching the display: rows = fields, columns = products
+    const visibleFields = compareFields.filter((f) => ordered.some((r) => r[f.key] != null));
+    const productNames = ordered.map((r) => `${r.brand_label} ${r.product_name}`);
+    const headerRow = ['', ...productNames];
+    const fieldRows = visibleFields.map((f) => [
+      t(f.labelKey),
+      ...ordered.map((r) => {
+        const v = r[f.key];
+        if (v == null) return '';
+        return formatFieldCsv(f.key, v);
+      }),
+    ]);
+    downloadCsv([headerRow, ...fieldRows], 'audiospecs_compare.csv');
+  });
 
   // Clear all button
   document.getElementById('compare-clear-all')!.addEventListener('click', () => {
@@ -452,9 +483,49 @@ function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
+/** Same significant digits as display format but without units */
+function formatFieldCsv(key: string, v: unknown): string {
+  if (key === 'category_primary') return getCategoryLabel(v as string);
+  if (key === 'price_anchor_usd') return Math.round(Number(v)).toString();
+  if (key === 'release_year') return String(v);
+  if (key === 'spec_weight_g') return Math.round(Number(v)).toString();
+  if (key === 'driver_total_count') return String(Math.round(Number(v)));
+  if (key === 'spec_freq_low_hz' || key === 'spec_freq_high_hz') return sig3(Number(v));
+  if (key === 'amp_output_impedance_ohm' && Number(v) === 0) return '0';
+  if (key === 'crossover_freqs_hz_json') {
+    try {
+      const arr = JSON.parse(v as string) as number[];
+      return arr.map((n) => sig3(n)).join('; ');
+    } catch { return String(v); }
+  }
+  return sig3(Number(v));
+}
+
+function escapeCsvField(v: string): string {
+  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+    return '"' + v.replace(/"/g, '""') + '"';
+  }
+  return v;
+}
+
+function downloadCsv(rows: string[][], filename: string): void {
+  const csv = rows.map((r) => r.map(escapeCsvField).join(',')).join('\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function formatUnitCasing(s: string): string {
   // CSS for compare labels uses `text-transform: uppercase`, so we explicitly protect unit strings.
   return s
     .replace(/\(Hz\)/g, '(<span class="unit-case">Hz</span>)')
-    .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)');
+    .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)')
+    .replace(/\(g\)/g, '(<span class="unit-case">g</span>)')
+    .replace(/\(mW/g, '(<span class="unit-case">mW</span>')
+    .replace(/\(Vrms\)/g, '(<span class="unit-case">Vrms</span>)');
 }

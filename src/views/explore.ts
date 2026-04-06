@@ -124,7 +124,8 @@ export async function renderExplore(
           ${CATEGORY_KEYS.map((c) => `<option value="${c}" ${state.category === c ? 'selected' : ''}>${getCategoryLabel(c)}</option>`).join('')}
         </select>
       </div>
-      <div class="control-group" style="display:flex;align-items:flex-end;margin-left:auto">
+      <div class="control-group" style="display:flex;flex-direction:row;align-items:flex-end;margin-left:auto;gap:0.5rem">
+        <button id="explore-download" title="${t('common.download.tooltip')}">${t('common.download')}</button>
         <button id="explore-reset" class="danger">${t('common.reset')}</button>
       </div>
     </div>
@@ -482,6 +483,52 @@ export async function renderExplore(
   // Column selector help tooltips
   setupColHelpTooltips(colPanel, colPanel);
 
+  // Download CSV button
+  document.getElementById('explore-download')!.addEventListener('click', async () => {
+    const activeCols = getActiveColumns();
+    const conditions: string[] = [];
+    const sqlParams: unknown[] = [];
+    if (state.category) {
+      conditions.push('p.category_primary = ?');
+      sqlParams.push(state.category);
+    }
+    if (state.search) {
+      conditions.push("(p.product_name LIKE ? OR p.brand_name_en LIKE ? OR p.manufacturer_name_en LIKE ?)");
+      const like = `%${state.search}%`;
+      sqlParams.push(like, like, like);
+    }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+    const numericSelectParts = activeCols
+      .filter((c) => c.numeric)
+      .map((c) => {
+        const nc = ALL_NUMERIC_COLUMNS.find((n) => n.key === c.key)!;
+        const expr = colSqlExpr(nc);
+        return expr === `p.${c.key}` ? `p.${c.key}` : `${expr} as ${c.key}`;
+      });
+    const sql = `
+      SELECT
+        CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
+        p.product_name,
+        p.category_primary,
+        ${numericSelectParts.join(',\n        ')}
+      FROM web_product_core p
+      ${where}
+      ORDER BY ${state.sort} IS NULL, ${state.sort} ${state.sortDir}
+    `;
+    const rows = await query<Record<string, unknown>>(sql, sqlParams);
+    const headers = activeCols.map((c) => t(c.labelKey));
+    const csvRows = rows.map((r) =>
+      activeCols.map((col) => {
+        const v = r[col.key];
+        if (v == null) return '';
+        if (col.key === 'category_primary') return getCategoryLabel(v as string);
+        if (col.numeric) return formatNumCsv(v as number, col.key);
+        return String(v);
+      }),
+    );
+    downloadCsv([headers, ...csvRows], 'audiospecs_explore.csv');
+  });
+
   // Reset button — restore defaults and clear sessionStorage
   document.getElementById('explore-reset')!.addEventListener('click', () => {
     sessionStorage.removeItem(EXPLORE_STORAGE_KEY);
@@ -518,31 +565,72 @@ function sig3(v: number): string {
   return n.toString();
 }
 
+/** Same significant digits as formatNum but without units ($, g, k, etc.) */
+function formatNumCsv(v: number, key: string): string {
+  if (key === 'price_anchor_usd' || key === 'msrp_usd')
+    return Math.round(v).toString();
+  if (key === 'spec_freq_low_hz' || key === 'spec_freq_high_hz')
+    return sig3(v);
+  if (key === 'release_year') return String(v);
+  if (key === 'spec_weight_g') return Math.round(v).toString();
+  if (key === 'driver_total_count') return String(Math.round(v));
+  if (key === 'amp_output_impedance_ohm' && v === 0) return '0';
+  return sig3(v);
+}
+
 function formatNum(v: number, key: string): string {
   if (key === 'price_anchor_usd' || key === 'msrp_usd')
-    return '$' + v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    return Math.round(v).toLocaleString();
   if (key === 'spec_freq_low_hz' || key === 'spec_freq_high_hz')
     return formatHz(v);
   if (key === 'release_year') return String(v);
-  if (key === 'spec_weight_g') return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + 'g';
+  if (key === 'spec_weight_g') return formatKilo(v);
   if (key === 'driver_total_count') return String(Math.round(v));
   if (key === 'amp_output_impedance_ohm' && v === 0) return '≈0';
+  if ((key === 'amp_power_mw_32ohm' || key === 'amp_power_w') && v >= 1000)
+    return parseFloat(v.toPrecision(3)).toLocaleString();
+  return sig3(v);
+}
+
+function formatKilo(v: number): string {
+  if (v >= 1000) return parseFloat((v / 1000).toPrecision(3)).toString() + 'k';
   return sig3(v);
 }
 
 function formatHz(v: number): string {
-  if (v >= 1000) return parseFloat((v / 1000).toPrecision(3)).toString() + 'k';
-  return sig3(v);
+  return formatKilo(v);
 }
 
 function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
+function escapeCsvField(v: string): string {
+  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+    return '"' + v.replace(/"/g, '""') + '"';
+  }
+  return v;
+}
+
+function downloadCsv(rows: string[][], filename: string): void {
+  const csv = rows.map((r) => r.map(escapeCsvField).join(',')).join('\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function formatUnitCasing(s: string): string {
   // CSS for table headers uses `text-transform: uppercase`, so we explicitly protect unit strings.
   return s
     .replace(/\(Hz\)/g, '(<span class="unit-case">Hz</span>)')
-    .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)');
+    .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)')
+    .replace(/\(g\)/g, '(<span class="unit-case">g</span>)')
+    .replace(/\(mW/g, '(<span class="unit-case">mW</span>')
+    .replace(/\(Vrms\)/g, '(<span class="unit-case">Vrms</span>)');
 }
 

@@ -41,6 +41,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'common.share.copied': 'URL copied to clipboard!',
     'common.share.failed': 'Failed to copy URL',
     'common.reset': 'Reset',
+    'common.download': 'Download',
+    'common.download.tooltip': 'Download table as CSV',
     'common.better': 'Better',
 
     // Categories
@@ -162,7 +164,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'compare.field.impedance': 'Impedance (Ω)',
     'compare.field.sensitivity': 'Sensitivity Proxy (dB)',
     'compare.field.driveability': 'Driveability',
-    'compare.field.weight': 'Weight',
+    'compare.field.weight': 'Weight (g)',
     'compare.field.driver_count': 'Driver Count',
     'compare.field.freq_low': 'Freq Low (Hz)',
     'compare.field.freq_high': 'Freq High (Hz)',
@@ -329,6 +331,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'common.share.copied': 'URLをクリップボードにコピーしました！',
     'common.share.failed': 'URLのコピーに失敗しました',
     'common.reset': 'リセット',
+    'common.download': 'ダウンロード',
+    'common.download.tooltip': 'テーブルをCSVでダウンロード',
     'common.better': 'Better',
 
     // Categories
@@ -450,7 +454,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'compare.field.impedance': 'インピーダンス (Ω)',
     'compare.field.sensitivity': '感度プロキシ (dB)',
     'compare.field.driveability': '鳴らしやすさ',
-    'compare.field.weight': '重量',
+    'compare.field.weight': '重量 (g)',
     'compare.field.driver_count': 'ドライバー数',
     'compare.field.freq_low': '再生周波数下限 (Hz)',
     'compare.field.freq_high': '再生周波数上限 (Hz)',
