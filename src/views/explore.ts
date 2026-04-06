@@ -134,12 +134,15 @@ export async function renderExplore(
       </button>
       <div class="column-selector-panel" id="explore-col-panel" hidden>
         <div class="column-selector-list">
-          ${ALL_NUMERIC_COLUMNS.map((col) => `
+          ${ALL_NUMERIC_COLUMNS.map((col) => {
+            const desc = t(`axisdesc.${col.key}`);
+            const helpIcon = desc ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
+            return `
             <label class="column-selector-item">
               <input type="checkbox" value="${col.key}" ${colSelectionSet.has(col.key) ? 'checked' : ''} />
-              ${tAxis(col.key)}
-            </label>
-          `).join('')}
+              ${tAxis(col.key)}${helpIcon}
+            </label>`;
+          }).join('')}
         </div>
       </div>
     </div>
@@ -475,6 +478,9 @@ export async function renderExplore(
       loadData();
     });
   });
+
+  // Column selector help tooltips
+  setupColHelpTooltips(colPanel, colPanel);
 
   // Reset button — restore defaults and clear sessionStorage
   document.getElementById('explore-reset')!.addEventListener('click', () => {

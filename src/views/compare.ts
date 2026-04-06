@@ -46,6 +46,11 @@ function getCompareFields() {
     { key: 'spec_freq_high_hz', labelKey: 'compare.field.freq_high', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
     { key: 'perf_fr_harman_std_db', labelKey: 'compare.field.fr_harman_std', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'perf_fr_harman_avg_db', labelKey: 'compare.field.fr_harman_avg', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'amp_power_mw_32ohm', labelKey: 'compare.field.amp_power_mw_32ohm', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'amp_power_w', labelKey: 'compare.field.amp_power_w', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'amp_voltage_vrms', labelKey: 'compare.field.amp_voltage_vrms', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'amp_voltage_vrms_balanced', labelKey: 'compare.field.amp_voltage_vrms_balanced', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'amp_output_impedance_ohm', labelKey: 'compare.field.amp_output_impedance_ohm', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'crossover_freqs_hz_json', labelKey: 'compare.field.crossover', format: (v: unknown) => {
       if (v == null) return '—';
       try {

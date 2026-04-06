@@ -45,6 +45,12 @@ export const AXES: AxisDef[] = [
   // FR Harman (Headphone / IEM)
   { id: 'perf_fr_harman_std_db', source: 'perf_fr_harman_std_db', label: 'FR Harman Std Dev (dB)', scale: 'linear', better: 'lower' },
   { id: 'perf_fr_harman_avg_db', source: 'perf_fr_harman_avg_db', label: 'FR Harman Avg Dev (dB)', scale: 'linear', better: 'lower' },
+  // Amp output
+  { id: 'amp_power_mw_32ohm', source: 'amp_power_mw_32ohm', label: 'Headphone Output Power (mW @ 32Ω)', scale: 'log', better: 'higher' },
+  { id: 'amp_power_w', source: 'amp_power_w', label: 'Speaker Output Power (W)', scale: 'log', better: 'higher' },
+  { id: 'amp_voltage_vrms', source: 'amp_voltage_vrms', label: 'Output Voltage SE (Vrms)', scale: 'log', better: 'higher' },
+  { id: 'amp_voltage_vrms_balanced', source: 'amp_voltage_vrms_balanced', label: 'Output Voltage BAL (Vrms)', scale: 'log', better: 'higher' },
+  { id: 'amp_output_impedance_ohm', source: 'amp_output_impedance_ohm', label: 'Output Impedance (Ω)', scale: 'log', better: 'lower' },
 ];
 
 export const PRESETS: Preset[] = [
@@ -63,6 +69,10 @@ export const PRESETS: Preset[] = [
   { id: 'msrp_vs_harman_avg', x: 'price_anchor_usd', y: 'perf_fr_harman_avg_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs FR Harman avg deviation' },
   // Frequency range
   { id: 'msrp_vs_freq_range', x: 'spec_freq_low_hz', y: 'spec_freq_high_hz', color: 'brand_name_en', categories: ['headphone', 'iem', 'speaker'], purpose: 'Frequency range overview' },
+  // Amp output
+  { id: 'msrp_vs_power_32ohm', x: 'price_anchor_usd', y: 'amp_power_mw_32ohm', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs headphone output power' },
+  { id: 'msrp_vs_output_impedance', x: 'price_anchor_usd', y: 'amp_output_impedance_ohm', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs output impedance' },
+  { id: 'msrp_vs_speaker_power', x: 'price_anchor_usd', y: 'amp_power_w', color: 'brand_name_en', categories: ['speaker', 'speaker_amp'], purpose: 'Price vs speaker output power' },
 ];
 
 /** Get localized axis label */

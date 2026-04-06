@@ -40,8 +40,8 @@ export function setupColHelpTooltips(
   }
 
   container.querySelectorAll<HTMLElement>('.col-help').forEach((icon) => {
-    // Prevent parent click (e.g. th sort) when clicking the help icon
-    icon.addEventListener('click', (e) => { e.stopPropagation(); });
+    // Prevent parent click (e.g. th sort, label checkbox toggle) when clicking the help icon
+    icon.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
 
     // Desktop: hover
     icon.addEventListener('mouseenter', () => showPopup(icon));
