@@ -1061,6 +1061,17 @@ table.data-table .numeric {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  #explore-table th.fixed-col,
+  #explore-table td.fixed-col {
+    position: static;
+  }
+
+  #explore-table th.fixed-col {
+    position: sticky;
+    top: 0;
+    left: auto;
+  }
+
 }
 
 /* ── Narrow mobile: toolbar into hamburger ── */
