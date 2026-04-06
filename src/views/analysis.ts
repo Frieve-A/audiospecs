@@ -34,6 +34,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   usb_interface: '#64748b',
 };
 
+let analysisResizeObserver: ResizeObserver | null = null;
+
 export async function renderAnalysis(
   container: HTMLElement,
   params: URLSearchParams,
@@ -443,21 +445,38 @@ export async function renderAnalysis(
     const currentFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize || `${baseFontPx}`);
     const fontScale = Number.isFinite(currentFontPx) ? currentFontPx / baseFontPx : 1.25;
 
+    function narrowLayout(n: boolean) {
+      return {
+        xStandoff: (n ? 4 : 10) * fontScale,
+        yStandoff: (n ? 2 : 10) * fontScale,
+        margin: {
+          l: (n ? 40 : 70) * fontScale,
+          r: (n ? 8 : 20) * fontScale,
+          t: 20 * fontScale,
+          b: (n ? 40 : 55) * fontScale,
+        },
+      };
+    }
+
+    let wasNarrow = window.innerWidth <= 540;
+    const nl = narrowLayout(wasNarrow);
+
     const axisTitleFont = {
       family: 'Inter, sans-serif',
       size: 13 * fontScale,
       color: '#374151',
       weight: 600,
     };
+
     const layout: Partial<Layout> = {
       xaxis: {
-        title: { text: xLabel, font: axisTitleFont, standoff: 10 * fontScale },
+        title: { text: xLabel, font: axisTitleFont, standoff: nl.xStandoff },
         type: xAxis.scale === 'log' ? 'log' : 'linear',
         gridcolor: '#eee',
         zerolinecolor: '#ddd',
       },
       yaxis: {
-        title: { text: yLabel, font: axisTitleFont, standoff: 10 * fontScale },
+        title: { text: yLabel, font: axisTitleFont, standoff: nl.yStandoff },
         type: yAxis.scale === 'log' ? 'log' : 'linear',
         gridcolor: '#eee',
         zerolinecolor: '#ddd',
@@ -465,7 +484,7 @@ export async function renderAnalysis(
       paper_bgcolor: '#fff',
       plot_bgcolor: '#fff',
       font: { family: 'Inter, sans-serif', size: 12 * fontScale },
-      margin: { l: 70 * fontScale, r: 20 * fontScale, t: 20 * fontScale, b: 55 * fontScale },
+      margin: nl.margin,
       legend: {
         orientation: 'h',
         y: -0.15 * fontScale,
@@ -519,6 +538,21 @@ export async function renderAnalysis(
     updateRAnnotation();
     Plotly.purge('scatter-plot');
     await Plotly.newPlot('scatter-plot', traces, layout, config);
+
+    // ── Responsive margin update on breakpoint crossing ──
+    if (analysisResizeObserver) analysisResizeObserver.disconnect();
+    analysisResizeObserver = new ResizeObserver(() => {
+      const isNarrow = window.innerWidth <= 540;
+      if (isNarrow === wasNarrow) return;
+      wasNarrow = isNarrow;
+      const u = narrowLayout(isNarrow);
+      Plotly.relayout('scatter-plot', {
+        margin: u.margin,
+        'xaxis.title.standoff': u.xStandoff,
+        'yaxis.title.standoff': u.yStandoff,
+      });
+    });
+    analysisResizeObserver.observe(plotEl);
 
     // Predict visibility state after legend click/doubleclick, then update R
     type PlotlyGd = HTMLElement & { data?: Array<{ visible?: boolean | 'legendonly' }> };

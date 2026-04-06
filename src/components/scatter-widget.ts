@@ -166,6 +166,22 @@ export async function renderScatterWidget(
   const currentFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize || `${baseFontPx}`);
   const fontScale = Number.isFinite(currentFontPx) ? currentFontPx / baseFontPx : 1.25;
 
+  function narrowLayout(n: boolean) {
+    return {
+      xStandoff: (n ? 4 : 10) * fontScale,
+      yStandoff: (n ? 2 : 10) * fontScale,
+      margin: {
+        l: (n ? 40 : 70) * fontScale,
+        r: (n ? 8 : 20) * fontScale,
+        t: 20 * fontScale,
+        b: (n ? 40 : 55) * fontScale,
+      },
+    };
+  }
+
+  let wasNarrow = window.innerWidth <= 540;
+  const nl = narrowLayout(wasNarrow);
+
   const axisTitleFont = {
     family: 'Inter, sans-serif',
     size: 13 * fontScale,
@@ -177,14 +193,14 @@ export async function renderScatterWidget(
 
   const layout: Partial<Layout> = {
     xaxis: {
-      title: { text: xLabel, font: axisTitleFont, standoff: 10 * fontScale },
+      title: { text: xLabel, font: axisTitleFont, standoff: nl.xStandoff },
       type: xAxis.scale === 'log' ? 'log' : 'linear',
       gridcolor: '#eee',
       zerolinecolor: '#ddd',
       ...(isStatic ? { fixedrange: true } : {}),
     },
     yaxis: {
-      title: { text: yLabel, font: axisTitleFont, standoff: 10 * fontScale },
+      title: { text: yLabel, font: axisTitleFont, standoff: nl.yStandoff },
       type: yAxis.scale === 'log' ? 'log' : 'linear',
       gridcolor: '#eee',
       zerolinecolor: '#ddd',
@@ -193,7 +209,7 @@ export async function renderScatterWidget(
     paper_bgcolor: '#fff',
     plot_bgcolor: '#fff',
     font: { family: 'Inter, sans-serif', size: 12 * fontScale },
-    margin: { l: 70 * fontScale, r: 20 * fontScale, t: 20 * fontScale, b: 55 * fontScale },
+    margin: nl.margin,
     legend: {
       orientation: 'h',
       y: -0.15 * fontScale,
@@ -243,6 +259,23 @@ export async function renderScatterWidget(
 
   updateRAnnotation();
   await Plotly.react(plotId, traces, layout, plotConfig);
+
+  // ── Responsive margin update on breakpoint crossing ──
+  const plotContainer = document.getElementById(plotId);
+  if (plotContainer) {
+    const ro = new ResizeObserver(() => {
+      const isNarrow = window.innerWidth <= 540;
+      if (isNarrow === wasNarrow) return;
+      wasNarrow = isNarrow;
+      const u = narrowLayout(isNarrow);
+      Plotly.relayout(plotId, {
+        margin: u.margin,
+        'xaxis.title.standoff': u.xStandoff,
+        'yaxis.title.standoff': u.yStandoff,
+      });
+    });
+    ro.observe(plotContainer);
+  }
 
   // ── Context menu ──
   ensureCtxDismiss();

@@ -244,7 +244,7 @@ export async function renderHome(container: HTMLElement): Promise<void> {
       </div>
     </section>
   `;
-  }).join('');
+  }).join('<hr class="home-section-divider">');
 
   container.innerHTML = `
     <div class="view-header">
