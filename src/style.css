@@ -745,6 +745,7 @@ table.data-table .numeric {
   width: 120px;
   min-width: 120px;
   max-width: 120px;
+  left: 0;
   white-space: normal;
   word-break: break-word;
 }
@@ -754,6 +755,7 @@ table.data-table .numeric {
   width: 180px;
   min-width: 180px;
   max-width: 180px;
+  left: 120px;
   white-space: normal;
   word-break: break-word;
 }
