@@ -87,7 +87,7 @@ export async function renderCompare(
       <p>${t('compare.subtitle')}</p>
     </div>
     <div class="controls-bar">
-      <div class="control-group product-search" style="flex:1;max-width:400px">
+      <div class="control-group product-search" style="flex:1;min-width:360px;max-width:400px">
         <label>${t('compare.label.add')}</label>
         <input type="search" id="compare-search" placeholder="${t('compare.placeholder.search')}" style="width:100%"/>
         <div class="search-results" id="compare-results" style="display:none"></div>

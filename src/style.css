@@ -1066,12 +1066,6 @@ table.data-table .numeric {
     position: static;
   }
 
-  #explore-table th.fixed-col {
-    position: sticky;
-    top: 0;
-    left: auto;
-  }
-
 }
 
 /* ── Narrow mobile: toolbar into hamburger ── */
