@@ -45,6 +45,11 @@ export const AXES: AxisDef[] = [
   // FR Harman (Headphone / IEM)
   { id: 'perf_fr_harman_std_db', source: 'perf_fr_harman_std_db', label: 'FR Harman Std Dev (dB)', scale: 'linear', better: 'lower' },
   { id: 'perf_fr_harman_avg_db', source: 'perf_fr_harman_avg_db', label: 'FR Harman Avg Dev (dB)', scale: 'linear', better: 'lower' },
+  // Spinorama Preference Score (Speaker)
+  { id: 'perf_preference_score', source: 'perf_preference_score', label: 'Preference Score', scale: 'linear', better: 'higher' },
+  { id: 'perf_preference_score_with_sub', source: 'perf_preference_score_with_sub', label: 'Pref Score (w/ Sub)', scale: 'linear', better: 'higher' },
+  { id: 'perf_preference_score_eq', source: 'perf_preference_score_eq', label: 'Pref Score (EQ)', scale: 'linear', better: 'higher' },
+  { id: 'perf_preference_score_eq_with_sub', source: 'perf_preference_score_eq_with_sub', label: 'Pref Score (EQ + Sub)', scale: 'linear', better: 'higher' },
   // Amp output
   { id: 'amp_power_mw_32ohm', source: 'amp_power_mw_32ohm', label: 'Headphone Output Power (mW @ 32Ω)', scale: 'log', better: 'higher' },
   { id: 'amp_power_w', source: 'amp_power_w', label: 'Speaker Output Power (W)', scale: 'log', better: 'higher' },
@@ -73,6 +78,10 @@ export const PRESETS: Preset[] = [
   { id: 'msrp_vs_power_32ohm', x: 'price_anchor_usd', y: 'amp_power_mw_32ohm', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs headphone output power' },
   { id: 'msrp_vs_output_impedance', x: 'price_anchor_usd', y: 'amp_output_impedance_ohm', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs output impedance' },
   { id: 'msrp_vs_speaker_power', x: 'price_anchor_usd', y: 'amp_power_w', color: 'brand_name_en', categories: ['speaker', 'speaker_amp'], purpose: 'Price vs speaker output power' },
+  // Speaker — Spinorama Preference Score
+  { id: 'msrp_vs_preference', x: 'price_anchor_usd', y: 'perf_preference_score', color: 'brand_name_en', categories: ['speaker'], purpose: 'Price vs Spinorama preference' },
+  { id: 'msrp_vs_preference_sub', x: 'price_anchor_usd', y: 'perf_preference_score_with_sub', color: 'brand_name_en', categories: ['speaker'], purpose: 'Price vs Spinorama preference (w/ sub)' },
+  { id: 'preference_vs_preference_eq', x: 'perf_preference_score', y: 'perf_preference_score_eq', color: 'brand_name_en', categories: ['speaker'], purpose: 'EQ improvement on preference score' },
 ];
 
 /** Get localized axis label */

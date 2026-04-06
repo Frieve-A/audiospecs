@@ -134,7 +134,33 @@ const SECTIONS: HomeSection[] = [
       staticChart: true,
     },
   },
-  // 10. Table: Speaker, Freq Low ascending
+  // 10. Speaker: Price vs Preference Score
+  {
+    type: 'scatter',
+    descKey: 'home.section.price_preference',
+    config: {
+      id: 'price-preference',
+      categories: ['speaker'],
+      x: 'price_anchor_usd',
+      y: 'perf_preference_score',
+      color: 'category_primary',
+      staticChart: true,
+    },
+  },
+  // 11. Table: Speaker, Preference Score descending
+  {
+    type: 'table',
+    descKey: 'home.section.top_spk_preference',
+    config: {
+      id: 'top-spk-preference',
+      categories: ['speaker'],
+      sort: 'perf_preference_score',
+      sortDir: 'desc',
+      limit: 10,
+      columns: ['perf_preference_score', 'price_anchor_usd'],
+    },
+  },
+  // 12. Table: Speaker, Freq Low ascending
   {
     type: 'table',
     descKey: 'home.section.top_spk_freq_low',
