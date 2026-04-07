@@ -939,6 +939,12 @@ table.data-table .numeric {
   width: 100% !important;
 }
 
+.interaction-hint {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.5rem;
+}
+
 /* ── Warning/Info banners ── */
 .banner {
   padding: 0.6rem 1rem;

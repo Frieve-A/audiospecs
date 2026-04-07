@@ -4,6 +4,7 @@ import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsF
 import { t, tAxisDesc, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
+import { showToast } from '../toast';
 
 const SOURCE_TYPE_COLORS: Record<string, string> = {
   spec: '#9333ea',
@@ -65,6 +66,31 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 let analysisResizeObserver: ResizeObserver | null = null;
+
+function getInteractionHint(): string {
+  const mm = (q: string): boolean => {
+    try {
+      return window.matchMedia(q).matches;
+    } catch {
+      return false;
+    }
+  };
+  const caps = {
+    primaryFine: mm('(pointer: fine)'),
+    primaryCoarse: mm('(pointer: coarse)'),
+    anyFine: mm('(any-pointer: fine)'),
+    anyHover: mm('(any-hover: hover)'),
+    hasTouch: mm('(any-pointer: coarse)') || 'ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0,
+  };
+  if (caps.primaryFine && caps.anyHover) {
+    return t('analysis.hint.mouse');
+  } else if (caps.primaryCoarse && caps.hasTouch) {
+    return t('analysis.hint.touch');
+  } else if (caps.hasTouch && caps.anyFine) {
+    return t('analysis.hint.hybrid');
+  }
+  return t('analysis.hint.hybrid');
+}
 
 export async function renderAnalysis(
   container: HTMLElement,
@@ -139,6 +165,7 @@ export async function renderAnalysis(
       <button id="analysis-reset" class="danger">${t('common.reset')}</button>
     </div>
     <div id="analysis-warning"></div>
+    <div id="analysis-interaction-hint" class="interaction-hint">${getInteractionHint()}</div>
     <div class="scatter-container">
       <div id="scatter-plot" style="width:100%;height:550px"></div>
     </div>
@@ -1088,16 +1115,29 @@ export async function renderAnalysis(
 
     const searchQuery = `${row.brand_label} ${row.product_name}`.trim();
 
-    menu.querySelector('[data-action="compare"]')!.addEventListener('click', () => {
+    menu.querySelector('[data-action="compare"]')!.addEventListener('click', (ev) => {
       dismissCtxMenu();
+      const e = ev as MouseEvent;
+      const keepOnPage = e.ctrlKey || e.metaKey;
       let ids: string[] = [];
       try {
         const raw = sessionStorage.getItem('compare_ids');
         ids = raw ? JSON.parse(raw) : [];
       } catch { /* empty */ }
-      if (!ids.includes(row.product_id) && ids.length < 5) {
-        ids.push(row.product_id);
-        sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+      if (ids.includes(row.product_id)) {
+        if (keepOnPage) showToast(t('common.added_to_compare'));
+        else navigate('compare', { ids: ids.join(',') });
+        return;
+      }
+      if (ids.length >= 5) {
+        showToast(t('common.compare_full'));
+        return;
+      }
+      ids.push(row.product_id);
+      sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+      if (keepOnPage) {
+        showToast(t('common.added_to_compare'));
+      } else {
         navigate('compare', { ids: ids.join(',') });
       }
     });

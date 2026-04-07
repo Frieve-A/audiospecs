@@ -4,6 +4,7 @@ import { navigate } from '../router';
 import { t, tAxis, getLocale } from '../i18n';
 import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss } from '../sources';
 import { setupColHelpTooltips } from '../components/col-help';
+import { showToast } from '../toast';
 
 interface ExploreState {
   search: string;
@@ -75,22 +76,50 @@ export async function renderExplore(
   const stored = loadExploreState();
   const hasUrlParams = params.toString().length > 0;
 
-  // Parse columns from URL or session
-  const allNumericIds = new Set(ALL_NUMERIC_COLUMNS.map((c) => c.key));
+  // Pre-compute global min/max (unfiltered) for ALL numeric columns.
+  // Columns whose MIN and MAX are both null have no data at all — we hide
+  // these from the column selector and always force them off.
+  function colSqlExpr(col: typeof ALL_NUMERIC_COLUMNS[number]): string {
+    if (col.key === 'price_anchor_usd') return 'coalesce(p.street_price_usd, p.msrp_usd)';
+    if (col.key === 'msrp_usd') return 'p.msrp_usd';
+    return `p.${col.key}`;
+  }
+  const allNumericKeysForStats = ALL_NUMERIC_COLUMNS.map((c) => c.key);
+  const minMaxExprs = allNumericKeysForStats.map((k) => {
+    const col = ALL_NUMERIC_COLUMNS.find((c) => c.key === k)!;
+    const sqlSrc = colSqlExpr(col);
+    return `MIN(${sqlSrc}) as "min_${k}", MAX(${sqlSrc}) as "max_${k}"`;
+  }).join(', ');
+  const globalSql = `SELECT ${minMaxExprs} FROM web_product_core p`;
+  const [globalStats] = await query<Record<string, number>>(globalSql);
+
+  const availableNumericIds = new Set<string>();
+  for (const k of allNumericKeysForStats) {
+    if (globalStats[`min_${k}`] != null || globalStats[`max_${k}`] != null) {
+      availableNumericIds.add(k);
+    }
+  }
+  const AVAILABLE_NUMERIC_COLUMNS = ALL_NUMERIC_COLUMNS.filter((c) => availableNumericIds.has(c.key));
+  const DEFAULT_NUMERIC_KEYS_AVAILABLE = DEFAULT_NUMERIC_KEYS.filter((k) => availableNumericIds.has(k));
+
+  // Parse columns from URL or session. An empty selection is a valid,
+  // intentional state — distinct from "not set". The URL uses the sentinel
+  // "none" for an explicit empty selection so it survives a round-trip.
   function parseColumns(raw: string | null | undefined): string[] | null {
-    if (!raw) return null;
-    const keys = raw.split(',').filter((k) => allNumericIds.has(k));
-    return keys.length > 0 ? keys : null;
+    if (raw == null) return null;
+    if (raw === '' || raw === 'none') return [];
+    return raw.split(',').filter((k) => availableNumericIds.has(k));
   }
 
   const urlCols = parseColumns(params.get('cols'));
-  const storedCols = stored.columns && stored.columns.length > 0
-    ? stored.columns.filter((k) => allNumericIds.has(k))
+  const storedCols = Array.isArray(stored.columns)
+    ? stored.columns.filter((k) => availableNumericIds.has(k))
     : null;
 
-  const initialColumns = urlCols
-    || (!hasUrlParams && storedCols ? storedCols : null)
-    || DEFAULT_NUMERIC_KEYS;
+  const initialColumns: string[] =
+    urlCols != null ? urlCols
+    : (!hasUrlParams && storedCols != null) ? storedCols
+    : DEFAULT_NUMERIC_KEYS_AVAILABLE;
 
   const state: ExploreState = {
     search: params.get('q') || (!hasUrlParams ? stored.search || '' : ''),
@@ -135,7 +164,7 @@ export async function renderExplore(
       </button>
       <div class="column-selector-panel" id="explore-col-panel" hidden>
         <div class="column-selector-list">
-          ${ALL_NUMERIC_COLUMNS.map((col) => {
+          ${AVAILABLE_NUMERIC_COLUMNS.map((col) => {
             const desc = t(`axisdesc.${col.key}`);
             const helpIcon = desc ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
             return `
@@ -164,8 +193,8 @@ export async function renderExplore(
 
   /** Check if current columns match the default set */
   function isDefaultColumns(): boolean {
-    if (state.columns.length !== DEFAULT_NUMERIC_KEYS.length) return false;
-    return state.columns.every((k, i) => k === DEFAULT_NUMERIC_KEYS[i]);
+    if (state.columns.length !== DEFAULT_NUMERIC_KEYS_AVAILABLE.length) return false;
+    return state.columns.every((k, i) => k === DEFAULT_NUMERIC_KEYS_AVAILABLE[i]);
   }
 
   function syncUrl(): void {
@@ -174,7 +203,7 @@ export async function renderExplore(
     if (state.category) p.cat = state.category;
     p.sort = `${state.sort}:${state.sortDir}`;
     if (state.page > 0) p.page = String(state.page);
-    if (!isDefaultColumns()) p.cols = state.columns.join(',');
+    if (!isDefaultColumns()) p.cols = state.columns.length ? state.columns.join(',') : 'none';
     const qs = '?' + new URLSearchParams(p).toString();
     history.replaceState(null, '', `#/explore${qs}`);
     saveExploreState(state);
@@ -216,27 +245,9 @@ export async function renderExplore(
     setupColHelpTooltips(theadEl, document.getElementById('explore-table-wrap'));
   }
 
-  // Pre-compute global min/max (unfiltered) for bar normalization — runs once for ALL numeric columns
-  const allNumericKeys = ALL_NUMERIC_COLUMNS.map((c) => c.key);
-
-  /** Get SQL expression for a numeric column, prefixed with table alias p. */
-  function colSqlExpr(col: typeof ALL_NUMERIC_COLUMNS[number]): string {
-    if (col.key === 'price_anchor_usd') return 'coalesce(p.street_price_usd, p.msrp_usd)';
-    if (col.key === 'msrp_usd') return 'p.msrp_usd';
-    return `p.${col.key}`;
-  }
-
-  const minMaxExprs = allNumericKeys.map((k) => {
-    const col = ALL_NUMERIC_COLUMNS.find((c) => c.key === k)!;
-    const sqlSrc = colSqlExpr(col);
-    return `MIN(${sqlSrc}) as "min_${k}", MAX(${sqlSrc}) as "max_${k}"`;
-  }).join(', ');
-
-  const globalSql = `SELECT ${minMaxExprs} FROM web_product_core p`;
-  const [globalStats] = await query<Record<string, number>>(globalSql);
-
+  // Per-column ranges for bar normalization (derived from globalStats computed above)
   const colRange: Record<string, { min: number; max: number; scale: 'log' | 'linear' | 'year' }> = {};
-  for (const k of allNumericKeys) {
+  for (const k of allNumericKeysForStats) {
     colRange[k] = {
       min: globalStats[`min_${k}`],
       max: globalStats[`max_${k}`],
@@ -244,9 +255,44 @@ export async function renderExplore(
     };
   }
 
-  async function loadData(): Promise<void> {
-    renderThead();
+  // Numeric column IDs available under the CURRENT filter (search + category).
+  // Starts with the unfiltered-available set; updated per loadData call.
+  let filteredAvailableIds: Set<string> = new Set(availableNumericIds);
 
+  /** Re-query MIN/MAX with the current WHERE clause, then hide + uncheck
+   * columns that have no data, and drop them from state.columns / sort. */
+  async function updateColumnAvailability(where: string, sqlParams: unknown[]): Promise<void> {
+    const statSql = `SELECT ${minMaxExprs} FROM web_product_core p ${where}`;
+    const [filteredStats] = await query<Record<string, number>>(statSql, sqlParams);
+    const newAvailable = new Set<string>();
+    for (const k of allNumericKeysForStats) {
+      if (filteredStats[`min_${k}`] != null || filteredStats[`max_${k}`] != null) {
+        newAvailable.add(k);
+      }
+    }
+    filteredAvailableIds = newAvailable;
+
+    // Hide/show selector items; uncheck any that became unavailable.
+    // Use inline display (not the `hidden` attribute) because the CSS rule
+    // `.column-selector-item { display: flex }` overrides `[hidden]`.
+    colPanel.querySelectorAll<HTMLLabelElement>('.column-selector-item').forEach((label) => {
+      const cb = label.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      const avail = filteredAvailableIds.has(cb.value);
+      label.style.display = avail ? '' : 'none';
+      if (!avail && cb.checked) cb.checked = false;
+    });
+
+    // Drop unavailable columns from state.
+    state.columns = state.columns.filter((k) => filteredAvailableIds.has(k));
+
+    // If current sort targets an unavailable column, fall back to default.
+    if (state.sort !== 'brand_label' && !filteredAvailableIds.has(state.sort)) {
+      state.sort = DEFAULT_SORT;
+      state.sortDir = 'desc';
+    }
+  }
+
+  async function loadData(): Promise<void> {
     const conditions: string[] = [];
     const sqlParams: unknown[] = [];
 
@@ -262,10 +308,9 @@ export async function renderExplore(
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    // Determine sort column
-    let sortCol = state.sort;
-    if (sortCol === 'brand_label') sortCol = 'brand_label';
-    else if (sortCol === 'price_anchor_usd') sortCol = 'price_anchor_usd';
+    // Update column availability based on current filter, then render header.
+    await updateColumnAvailability(where, sqlParams);
+    renderThead();
 
     const countSql = `SELECT COUNT(*) as cnt FROM web_product_core p ${where}`;
     const [{ cnt }] = await query<{ cnt: number }>(countSql, sqlParams);
@@ -280,16 +325,32 @@ export async function renderExplore(
         return expr === `p.${c.key}` ? `p.${c.key}` : `${expr} as ${c.key}`;
       });
 
+    // Resolve ORDER BY expression: if sort column is a numeric column not
+    // currently selected, use its raw SQL expression (aliases only exist for
+    // selected columns). brand_label is always aliased in SELECT.
+    const activeNumericKeys = new Set(activeCols.filter((c) => c.numeric).map((c) => c.key));
+    let sortExpr: string;
+    if (state.sort === 'brand_label') {
+      sortExpr = 'brand_label';
+    } else if (activeNumericKeys.has(state.sort)) {
+      sortExpr = state.sort;
+    } else {
+      const nc = ALL_NUMERIC_COLUMNS.find((n) => n.key === state.sort);
+      sortExpr = nc ? colSqlExpr(nc) : `p.${state.sort}`;
+    }
+
+    const numericSelectClause = numericSelectParts.length
+      ? ',\n        ' + numericSelectParts.join(',\n        ')
+      : '';
     const dataSql = `
       SELECT
         p.product_id,
         CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
         p.product_name,
-        p.category_primary,
-        ${numericSelectParts.join(',\n        ')}
+        p.category_primary${numericSelectClause}
       FROM web_product_core p
       ${where}
-      ORDER BY ${sortCol} IS NULL, ${sortCol} ${state.sortDir}
+      ORDER BY ${sortExpr} IS NULL, ${sortExpr} ${state.sortDir}
       LIMIT ? OFFSET ?
     `;
 
@@ -360,16 +421,29 @@ export async function renderExplore(
 
     // Compare buttons
     tbodyEl.querySelectorAll('.compare-add').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (ev) => {
         const id = (btn as HTMLElement).dataset.id!;
+        const e = ev as MouseEvent;
+        const keepOnPage = e.ctrlKey || e.metaKey;
         let ids: string[] = [];
         try {
           const raw = sessionStorage.getItem('compare_ids');
           ids = raw ? JSON.parse(raw) : [];
         } catch { /* empty */ }
-        if (!ids.includes(id) && ids.length < 5) {
-          ids.push(id);
-          sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+        if (ids.includes(id)) {
+          if (keepOnPage) showToast(t('common.added_to_compare'));
+          else navigate('compare', { ids: ids.join(',') });
+          return;
+        }
+        if (ids.length >= 5) {
+          showToast(t('common.compare_full'));
+          return;
+        }
+        ids.push(id);
+        sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+        if (keepOnPage) {
+          showToast(t('common.added_to_compare'));
+        } else {
           navigate('compare', { ids: ids.join(',') });
         }
       });
@@ -467,7 +541,7 @@ export async function renderExplore(
       const checked = Array.from(colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked'))
         .map((el) => el.value);
       // Preserve order from ALL_NUMERIC_COLUMNS
-      state.columns = ALL_NUMERIC_COLUMNS.map((c) => c.key).filter((k) => checked.includes(k));
+      state.columns = AVAILABLE_NUMERIC_COLUMNS.map((c) => c.key).filter((k) => checked.includes(k));
       // If sort column was removed, reset to default
       const activeCols = getActiveColumns();
       if (!activeCols.some((c) => c.key === state.sort)) {
@@ -505,15 +579,27 @@ export async function renderExplore(
         const expr = colSqlExpr(nc);
         return expr === `p.${c.key}` ? `p.${c.key}` : `${expr} as ${c.key}`;
       });
+    const activeNumericKeys = new Set(activeCols.filter((c) => c.numeric).map((c) => c.key));
+    let sortExpr: string;
+    if (state.sort === 'brand_label') {
+      sortExpr = 'brand_label';
+    } else if (activeNumericKeys.has(state.sort)) {
+      sortExpr = state.sort;
+    } else {
+      const nc = ALL_NUMERIC_COLUMNS.find((n) => n.key === state.sort);
+      sortExpr = nc ? colSqlExpr(nc) : `p.${state.sort}`;
+    }
+    const numericSelectClause = numericSelectParts.length
+      ? ',\n        ' + numericSelectParts.join(',\n        ')
+      : '';
     const sql = `
       SELECT
         CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
         p.product_name,
-        p.category_primary,
-        ${numericSelectParts.join(',\n        ')}
+        p.category_primary${numericSelectClause}
       FROM web_product_core p
       ${where}
-      ORDER BY ${state.sort} IS NULL, ${state.sort} ${state.sortDir}
+      ORDER BY ${sortExpr} IS NULL, ${sortExpr} ${state.sortDir}
     `;
     const rows = await query<Record<string, unknown>>(sql, sqlParams);
     const headers = activeCols.map((c) => t(c.labelKey));
@@ -537,12 +623,12 @@ export async function renderExplore(
     state.sort = DEFAULT_SORT;
     state.sortDir = 'desc';
     state.page = 0;
-    state.columns = [...DEFAULT_NUMERIC_KEYS];
+    state.columns = [...DEFAULT_NUMERIC_KEYS_AVAILABLE];
     // Update UI inputs
     (document.getElementById('explore-search') as HTMLInputElement).value = '';
     (document.getElementById('explore-cat') as HTMLSelectElement).value = '';
     // Update column checkboxes
-    const defaultSet = new Set(DEFAULT_NUMERIC_KEYS);
+    const defaultSet = new Set(DEFAULT_NUMERIC_KEYS_AVAILABLE);
     colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
       cb.checked = defaultSet.has(cb.value);
     });
