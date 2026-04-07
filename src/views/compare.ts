@@ -8,6 +8,7 @@ import { setupColHelpTooltips } from '../components/col-help';
 let cleanupDocListener: (() => void) | null = null;
 
 const STORAGE_KEY = 'compare_ids';
+const SPLIT_STORAGE_KEY = 'compare_split_measured';
 
 function loadIds(): string[] {
   try {
@@ -22,39 +23,89 @@ function saveIds(ids: string[]): void {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
 }
 
+function loadSplit(): boolean {
+  try {
+    return localStorage.getItem(SPLIT_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveSplit(v: boolean): void {
+  try {
+    localStorage.setItem(SPLIT_STORAGE_KEY, v ? '1' : '0');
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Filter compare fields based on the "split spec/measured" mode.
+ * - When split=false: hide *_measured and *_spec fields whose base key also exists
+ *   (so only the "best" field is shown).
+ * - When split=true: hide base fields that have a *_measured or *_spec sibling
+ *   (so only the spec and measured values are shown independently).
+ */
+function filterFieldsForSplitMode<T extends { key: string }>(fields: T[], split: boolean): T[] {
+  const keys = new Set(fields.map((f) => f.key));
+  const baseOf = (k: string): string | null => {
+    if (k.endsWith('_measured')) return k.slice(0, -'_measured'.length);
+    if (k.endsWith('_spec')) return k.slice(0, -'_spec'.length);
+    return null;
+  };
+  const hasSiblings = (k: string) => keys.has(`${k}_measured`) || keys.has(`${k}_spec`);
+  return fields.filter((f) => {
+    const base = baseOf(f.key);
+    const isSibling = base != null && keys.has(base);
+    if (split) {
+      // Hide the base (best) when it has siblings; keep siblings.
+      return !hasSiblings(f.key);
+    }
+    // Hide siblings when the base exists; keep the base (best).
+    return !isSibling;
+  });
+}
+
 function getCompareFields() {
   return [
     { key: 'category_primary', labelKey: 'compare.field.category', format: (v: unknown) => getCategoryLabel(v as string) },
     { key: 'price_anchor_usd', labelKey: 'compare.field.price', format: (v: unknown) => v != null ? Math.round(Number(v)).toLocaleString() : '—' },
     { key: 'release_year', labelKey: 'compare.field.year', format: (v: unknown) => v ?? '—' },
-    { key: 'perf_sinad_db', labelKey: 'compare.field.sinad', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_snr_db', labelKey: 'compare.field.snr', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_thd_percent', labelKey: 'compare.field.thd', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_dynamic_range_db', labelKey: 'compare.field.dynamic_range', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_crosstalk_db', labelKey: 'compare.field.crosstalk', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'spec_impedance_ohm', labelKey: 'compare.field.impedance', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'sinad_db', labelKey: 'compare.field.sinad', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'snr_db', labelKey: 'compare.field.snr', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'thd_percent', labelKey: 'compare.field.thd', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'thd_percent_measured', labelKey: 'compare.field.thd_measured', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'thd_percent_spec', labelKey: 'compare.field.thd_spec', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'dynamic_range_db', labelKey: 'compare.field.dynamic_range', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'crosstalk_db', labelKey: 'compare.field.crosstalk', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'impedance_ohm', labelKey: 'compare.field.impedance', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'sensitivity_proxy_db', labelKey: 'compare.field.sensitivity', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'driveability_index', labelKey: 'compare.field.driveability', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'spec_weight_g', labelKey: 'compare.field.weight', format: (v: unknown) => {
+    { key: 'weight_g', labelKey: 'compare.field.weight', format: (v: unknown) => {
       if (v == null) return '—';
       const n = Number(v);
       if (n >= 1000) return parseFloat((n / 1000).toPrecision(3)).toString() + 'k';
       return sig3(n);
     } },
     { key: 'driver_total_count', labelKey: 'compare.field.driver_count', format: (v: unknown) => v != null ? String(Math.round(Number(v))) : '—' },
-    { key: 'spec_freq_low_hz', labelKey: 'compare.field.freq_low', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
-    { key: 'spec_freq_high_hz', labelKey: 'compare.field.freq_high', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
-    { key: 'perf_fr_harman_std_db', labelKey: 'compare.field.fr_harman_std', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_fr_harman_avg_db', labelKey: 'compare.field.fr_harman_avg', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_preference_score', labelKey: 'compare.field.perf_preference_score', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_preference_score_with_sub', labelKey: 'compare.field.perf_preference_score_with_sub', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_preference_score_eq', labelKey: 'compare.field.perf_preference_score_eq', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
-    { key: 'perf_preference_score_eq_with_sub', labelKey: 'compare.field.perf_preference_score_eq_with_sub', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'freq_low_hz', labelKey: 'compare.field.freq_low', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
+    { key: 'freq_high_hz', labelKey: 'compare.field.freq_high', format: (v: unknown) => v != null ? formatHz(Number(v)) : '—' },
+    { key: 'fr_harman_std_db', labelKey: 'compare.field.fr_harman_std', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'fr_harman_avg_db', labelKey: 'compare.field.fr_harman_avg', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'preference_score', labelKey: 'compare.field.preference_score', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'preference_score_with_sub', labelKey: 'compare.field.preference_score_with_sub', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'preference_score_eq', labelKey: 'compare.field.preference_score_eq', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
+    { key: 'preference_score_eq_with_sub', labelKey: 'compare.field.preference_score_eq_with_sub', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'amp_power_mw_32ohm', labelKey: 'compare.field.amp_power_mw_32ohm', format: (v: unknown) => v != null ? (Number(v) >= 1000 ? parseFloat(Number(v).toPrecision(3)).toLocaleString() : sig3(Number(v))) : '—' },
     { key: 'amp_power_w', labelKey: 'compare.field.amp_power_w', format: (v: unknown) => v != null ? (Number(v) >= 1000 ? parseFloat(Number(v).toPrecision(3)).toLocaleString() : sig3(Number(v))) : '—' },
     { key: 'amp_voltage_vrms', labelKey: 'compare.field.amp_voltage_vrms', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'amp_voltage_vrms_balanced', labelKey: 'compare.field.amp_voltage_vrms_balanced', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'amp_output_impedance_ohm', labelKey: 'compare.field.amp_output_impedance_ohm', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
+    { key: 'amp_output_impedance_ohm_measured', labelKey: 'compare.field.amp_output_impedance_ohm_measured', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
+    { key: 'amp_output_impedance_ohm_spec', labelKey: 'compare.field.amp_output_impedance_ohm_spec', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
+    { key: 'line_output_impedance_ohm', labelKey: 'compare.field.line_output_impedance_ohm', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
+    { key: 'line_output_impedance_ohm_measured', labelKey: 'compare.field.line_output_impedance_ohm_measured', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
+    { key: 'line_output_impedance_ohm_spec', labelKey: 'compare.field.line_output_impedance_ohm_spec', format: (v: unknown) => v != null ? (Number(v) === 0 ? '≈0' : sig3(Number(v))) : '—' },
     { key: 'crossover_freqs_hz_json', labelKey: 'compare.field.crossover', format: (v: unknown) => {
       if (v == null) return '—';
       try {
@@ -80,6 +131,8 @@ export async function renderCompare(
   const ids = urlIds.length > 0 ? urlIds : storedIds;
   saveIds(ids);
 
+  let split = loadSplit();
+
   // Sync restored IDs to URL so the share button captures the full state
   if (ids.length > 0 && urlIds.length === 0) {
     history.replaceState(null, '', `#/compare?ids=${ids.join(',')}`);
@@ -96,7 +149,11 @@ export async function renderCompare(
         <input type="search" id="compare-search" placeholder="${t('compare.placeholder.search')}" style="width:100%"/>
         <div class="search-results" id="compare-results" style="display:none"></div>
       </div>
-      <div class="control-group" style="display:flex;flex-direction:row;align-items:flex-end;margin-left:auto;gap:0.5rem">
+      <div class="control-group" style="display:flex;flex-direction:row;align-items:center;margin-left:auto;gap:0.75rem">
+        <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.85rem;cursor:pointer">
+          <input type="checkbox" id="compare-split-measured" ${split ? 'checked' : ''}/>
+          ${t('compare.split_spec_measured')}
+        </label>
         <button id="compare-download" title="${t('common.download.tooltip')}">${t('common.download')}</button>
         <button id="compare-clear-all" class="danger">${t('common.clear_all')}</button>
       </div>
@@ -118,7 +175,7 @@ export async function renderCompare(
       ids,
     );
     const ordered = ids.map((id) => rows.find((r) => r.product_id === id)).filter(Boolean) as Record<string, unknown>[];
-    const compareFields = getCompareFields();
+    const compareFields = filterFieldsForSplitMode(getCompareFields(), split);
     // Transposed layout matching the display: rows = fields, columns = products
     const visibleFields = compareFields.filter((f) => ordered.some((r) => r[f.key] != null));
     const productNames = ordered.map((r) => `${r.brand_label} ${r.product_name}`);
@@ -132,6 +189,13 @@ export async function renderCompare(
       }),
     ]);
     downloadCsv([headerRow, ...fieldRows], 'audiospecs_compare.csv');
+  });
+
+  // Split spec/measured toggle
+  document.getElementById('compare-split-measured')!.addEventListener('change', (e) => {
+    split = (e.target as HTMLInputElement).checked;
+    saveSplit(split);
+    loadCompare();
   });
 
   // Clear all button
@@ -230,7 +294,7 @@ export async function renderCompare(
 
     // Keep order
     const ordered = ids.map((id) => rows.find((r) => r.product_id === id)).filter(Boolean) as Record<string, unknown>[];
-    const compareFields = getCompareFields();
+    const compareFields = filterFieldsForSplitMode(getCompareFields(), split);
 
     // Query global min/max for bar normalization
     const numericFieldKeys = compareFields.filter((f) => f.key !== 'category_primary').map((f) => f.key);
@@ -492,10 +556,12 @@ function formatFieldCsv(key: string, v: unknown): string {
   if (key === 'category_primary') return getCategoryLabel(v as string);
   if (key === 'price_anchor_usd') return Math.round(Number(v)).toString();
   if (key === 'release_year') return String(v);
-  if (key === 'spec_weight_g') return Math.round(Number(v)).toString();
+  if (key === 'weight_g') return Math.round(Number(v)).toString();
   if (key === 'driver_total_count') return String(Math.round(Number(v)));
-  if (key === 'spec_freq_low_hz' || key === 'spec_freq_high_hz') return sig3(Number(v));
-  if (key === 'amp_output_impedance_ohm' && Number(v) === 0) return '0';
+  if (key === 'freq_low_hz' || key === 'freq_high_hz'
+    || key === 'freq_low_hz_measured' || key === 'freq_high_hz_measured'
+    || key === 'freq_low_hz_spec' || key === 'freq_high_hz_spec') return sig3(Number(v));
+  if (/^(amp|line)_output_impedance_ohm(_measured|_spec)?$/.test(key) && Number(v) === 0) return '0';
   if (key === 'crossover_freqs_hz_json') {
     try {
       const arr = JSON.parse(v as string) as number[];

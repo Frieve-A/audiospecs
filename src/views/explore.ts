@@ -37,8 +37,8 @@ const ALL_NUMERIC_COLUMNS = AXES.map((a) => ({
 
 /** Default numeric column keys (matches original display) */
 const DEFAULT_NUMERIC_KEYS = [
-  'price_anchor_usd', 'release_year', 'perf_sinad_db', 'perf_snr_db',
-  'spec_freq_low_hz', 'spec_freq_high_hz',
+  'price_anchor_usd', 'release_year', 'sinad_db', 'snr_db',
+  'freq_low_hz', 'freq_high_hz',
 ];
 
 /** Build active COLUMN_KEYS from selected numeric keys */
@@ -569,25 +569,25 @@ function sig3(v: number): string {
 function formatNumCsv(v: number, key: string): string {
   if (key === 'price_anchor_usd' || key === 'msrp_usd')
     return Math.round(v).toString();
-  if (key === 'spec_freq_low_hz' || key === 'spec_freq_high_hz')
+  if (/^freq_(low|high)_hz(_measured|_spec)?$/.test(key))
     return sig3(v);
   if (key === 'release_year') return String(v);
-  if (key === 'spec_weight_g') return Math.round(v).toString();
+  if (key === 'weight_g') return Math.round(v).toString();
   if (key === 'driver_total_count') return String(Math.round(v));
-  if (key === 'amp_output_impedance_ohm' && v === 0) return '0';
+  if (/^(amp|line)_output_impedance_ohm(_measured|_spec)?$/.test(key) && v === 0) return '0';
   return sig3(v);
 }
 
 function formatNum(v: number, key: string): string {
   if (key === 'price_anchor_usd' || key === 'msrp_usd')
     return Math.round(v).toLocaleString();
-  if (key === 'spec_freq_low_hz' || key === 'spec_freq_high_hz')
+  if (/^freq_(low|high)_hz(_measured|_spec)?$/.test(key))
     return formatHz(v);
   if (key === 'release_year') return String(v);
-  if (key === 'spec_weight_g') return formatKilo(v);
+  if (key === 'weight_g') return formatKilo(v);
   if (key === 'driver_total_count') return String(Math.round(v));
-  if (key === 'amp_output_impedance_ohm' && v === 0) return '≈0';
-  if ((key === 'amp_power_mw_32ohm' || key === 'amp_power_w') && v >= 1000)
+  if (/^(amp|line)_output_impedance_ohm(_measured|_spec)?$/.test(key) && v === 0) return '≈0';
+  if (/^amp_power_(mw_32ohm|w)(_measured|_spec)?$/.test(key) && v >= 1000)
     return parseFloat(v.toPrecision(3)).toLocaleString();
   return sig3(v);
 }

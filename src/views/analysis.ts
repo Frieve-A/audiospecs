@@ -1,18 +1,48 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, computeParetoFrontier, clampForScatter, type Preset } from '../presets';
-import { t, getLocale } from '../i18n';
+import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, computeParetoFrontier, clampForScatter, axisHasSourceVariants, axisMatchesDataSource, getAxisSourceKind, resolveAxisSource, validDataSourcesForAxis, isVariantAxisId, type Preset, type DataSource, type XDataSource, type YDataSource } from '../presets';
+import { t, tAxisDesc, getLocale } from '../i18n';
 import { navigate } from '../router';
-import { columnToPatterns, fetchSourceUrls } from '../sources';
+import { fetchSourceUrls } from '../sources';
+
+const SOURCE_TYPE_COLORS: Record<string, string> = {
+  spec: '#9333ea',
+  measured: '#0891b2',
+  unknown: '#94a3b8',
+};
+
+const SOURCE_TYPE_SYMBOLS: Record<string, string> = {
+  spec: 'circle-open',
+  measured: 'circle',
+  unknown: 'x',
+};
+
+const CATEGORY_SYMBOLS: Record<string, string> = {
+  headphone: 'circle',
+  iem: 'diamond',
+  dac: 'square',
+  headphone_amp: 'triangle-up',
+  speaker: 'pentagon',
+  speaker_amp: 'star',
+  mic: 'cross',
+  usb_interface: 'hexagon',
+};
+
+const BRAND_SYMBOL_CYCLE = [
+  'circle', 'square', 'diamond', 'triangle-up', 'cross',
+  'star', 'pentagon', 'hexagon', 'triangle-down', 'x',
+  'star-square', 'hourglass',
+];
 
 /** Format a number for tooltip display: 3 significant digits, but year axes stay as 4-digit integers */
 function fmtAxis(v: number, axis: { id?: string; scale: string }): string {
   if (axis.scale === 'year') return Math.round(v).toString();
-  if (v === 0) return axis.id === 'amp_output_impedance_ohm' ? '≈0' : '0';
-  if (axis.id === 'spec_weight_g' && v > 1000) {
+  if (v === 0 && axis.id && /(^|_)(amp|line)_output_impedance_ohm(_measured|_spec)?$/.test(axis.id)) return '≈0';
+  if (v === 0) return '0';
+  if (axis.id === 'weight_g' && v > 1000) {
     return parseFloat((v / 1000).toPrecision(3)).toString() + ' kg';
   }
-  if ((axis.id === 'spec_freq_low_hz' || axis.id === 'spec_freq_high_hz') && v >= 1000) {
+  if (axis.id && /^freq_(low|high)_hz(_measured|_spec)?$/.test(axis.id) && v >= 1000) {
     return parseFloat((v / 1000).toPrecision(3)).toString() + 'k';
   }
   const n = parseFloat(v.toPrecision(3));
@@ -41,6 +71,21 @@ export async function renderAnalysis(
   params: URLSearchParams,
 ): Promise<void> {
   const STORAGE_KEY = 'analysis_state';
+  const UI_MODE_KEY = 'analysis_ui_mode';
+
+  type UiMode = 'basic' | 'advanced';
+  function loadUiMode(): UiMode {
+    try {
+      const v = localStorage.getItem(UI_MODE_KEY);
+      return v === 'advanced' ? 'advanced' : 'basic';
+    } catch {
+      return 'basic';
+    }
+  }
+  function saveUiMode(mode: UiMode): void {
+    try { localStorage.setItem(UI_MODE_KEY, mode); } catch { /* ignore */ }
+  }
+  let uiMode: UiMode = loadUiMode();
 
   function loadStoredState(): Record<string, string> {
     try {
@@ -57,6 +102,9 @@ export async function renderAnalysis(
       x: currentX,
       y: currentY,
       color: currentColor,
+      symbol: currentSymbol,
+      xSource: currentXDataSource,
+      ySource: currentYDataSource,
     };
     if (selectedCats.length) s.cat = selectedCats.join(',');
     if (currentKeyword) s.keyword = currentKeyword;
@@ -80,6 +128,10 @@ export async function renderAnalysis(
     <div class="view-header">
       <h1>${t('analysis.title')}</h1>
       <p>${t('analysis.subtitle')}</p>
+    </div>
+    <div class="analysis-mode-bar" id="analysis-mode-bar" style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+      <button type="button" id="mode-basic" class="mode-btn${uiMode === 'basic' ? ' active' : ''}">${t('analysis.mode.basic')}</button>
+      <button type="button" id="mode-advanced" class="mode-btn${uiMode === 'advanced' ? ' active' : ''}">${t('analysis.mode.advanced')}</button>
     </div>
     <div class="controls-bar" id="analysis-controls"></div>
     <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
@@ -105,8 +157,17 @@ export async function renderAnalysis(
   // State — restore from URL > sessionStorage > defaults
   let currentPreset: Preset | undefined = PRESETS.find((p) => p.id === presetId);
   let currentX = params.get('x') || stored.x || currentPreset?.x || 'price_anchor_usd';
-  let currentY = params.get('y') || stored.y || currentPreset?.y || 'perf_sinad_db';
+  let currentY = params.get('y') || stored.y || currentPreset?.y || 'sinad_db';
   let currentColor = params.get('color') || stored.color || currentPreset?.color || 'category_primary';
+  let currentSymbol = params.get('symbol') || stored.symbol || 'none';
+  const allXDataSources: XDataSource[] = ['best', 'spec', 'measured'];
+  const allYDataSources: YDataSource[] = ['best', 'both', 'spec', 'measured'];
+  // Back-compat: accept legacy `dataSource` param as a shared default.
+  const legacyDs = params.get('dataSource') || stored.dataSource || '';
+  const xSourceParam = (params.get('xSource') || stored.xSource || legacyDs || 'best') as XDataSource;
+  const ySourceParam = (params.get('ySource') || stored.ySource || legacyDs || 'best') as YDataSource;
+  let currentXDataSource: XDataSource = allXDataSources.includes(xSourceParam) ? xSourceParam : 'best';
+  let currentYDataSource: YDataSource = allYDataSources.includes(ySourceParam) ? ySourceParam : 'best';
   let currentKeyword = keywordParam;
   let currentLabels = (params.get('labels') || stored.labels || '') === '1';
   let currentLabelsPareto = (params.get('labelsPareto') || stored.labelsPareto || '') === '1';
@@ -120,6 +181,9 @@ export async function renderAnalysis(
     p.x = currentX;
     p.y = currentY;
     p.color = currentColor;
+    if (currentSymbol && currentSymbol !== 'none') p.symbol = currentSymbol;
+    if (currentXDataSource !== 'best') p.xSource = currentXDataSource;
+    if (currentYDataSource !== 'best') p.ySource = currentYDataSource;
     if (selectedCats.length) p.cat = selectedCats.join(',');
     if (currentKeyword) p.keyword = currentKeyword;
     if (currentLabels) p.labels = '1';
@@ -141,18 +205,45 @@ export async function renderAnalysis(
 
   async function renderControls(): Promise<void> {
     const cats = effectiveCats();
-    const validAxes = await getAxesForCategories(cats, query);
+    const allValidAxes = await getAxesForCategories(cats, query);
+    // Exclude variant (_measured / _spec) axes — users pick the data source
+    // via a separate per-axis control. Filter each axis dropdown by the
+    // current data source for that axis (e.g. SINAD is measured-only, so it
+    // should not appear in a dropdown whose source is 'spec').
+    const nonVariant = allValidAxes.filter((a) => !isVariantAxisId(a.id));
+    const validXAxes = nonVariant.filter(
+      (a) => axisMatchesDataSource(a.id, currentXDataSource),
+    );
+    const validYAxes = nonVariant.filter(
+      (a) => axisMatchesDataSource(a.id, currentYDataSource),
+    );
 
-    // Fallback to first valid axis if current selection is not valid for the category
-    if (!validAxes.find((a) => a.id === currentX)) {
-      currentX = validAxes[0]?.id || 'price_anchor_usd';
-    }
-    if (!validAxes.find((a) => a.id === currentY)) {
-      // Pick a different axis than X if possible
-      const fallback = validAxes.find((a) => a.id !== currentX);
-      currentY = fallback?.id || validAxes[0]?.id || 'price_anchor_usd';
-    }
+    // If current selection is a variant axis, collapse it to its base id.
+    const toBase = (id: string): string => id.replace(/_(measured|spec)$/, '');
+    currentX = toBase(currentX);
+    currentY = toBase(currentY);
 
+    // Keep the current selection in its dropdown even if it falls below the
+    // min-data threshold for the current category/data-source — the user has
+    // explicitly chosen it, and we show a "no data" message instead of
+    // silently falling back to another axis.
+    const ensureAxisVisible = (list: typeof validXAxes, id: string): void => {
+      if (list.find((a) => a.id === id)) return;
+      const a = getAxis(id);
+      if (a) list.push(a);
+    };
+    ensureAxisVisible(validXAxes, currentX);
+    ensureAxisVisible(validYAxes, currentY);
+
+    // Clamp the current data sources to what the currently selected axis supports.
+    const xDsOptions = validDataSourcesForAxis(currentX, false) as XDataSource[];
+    const yDsOptions = validDataSourcesForAxis(currentY, true) as YDataSource[];
+    if (!xDsOptions.includes(currentXDataSource)) currentXDataSource = 'best';
+    if (!yDsOptions.includes(currentYDataSource)) currentYDataSource = 'best';
+
+    const dsLabel = (ds: DataSource): string => t('analysis.data_source.' + ds);
+
+    const isAdvanced = uiMode === 'advanced';
     controlsEl.innerHTML = `
       <div class="control-group">
         <label>${t('analysis.label.category')}</label>
@@ -161,32 +252,67 @@ export async function renderAnalysis(
         </select>
       </div>
       <div class="control-group">
+        <label>${t('analysis.label.keyword')}</label>
+        <input type="text" id="input-keyword" value="${currentKeyword.replace(/"/g, '&quot;')}"
+               placeholder="${t('analysis.label.keyword_placeholder')}"
+               style="min-width:260px">
+      </div>
+      <div class="control-group">
         <label>${t('analysis.label.x_axis')}</label>
         <select id="sel-x">
-          ${validAxes.map((a) => `<option value="${a.id}" ${a.id === currentX ? 'selected' : ''}>${getAxisLabel(a)}</option>`).join('')}
+          ${validXAxes.map((a) => `<option value="${a.id}" ${a.id === currentX ? 'selected' : ''}>${getAxisLabel(a)}</option>`).join('')}
         </select>
-        <span class="axis-desc" id="desc-x">${t('axisdesc.' + currentX)}</span>
+        <span class="axis-desc" id="desc-x">${tAxisDesc(currentX)}</span>
       </div>
+      ${isAdvanced ? `<div class="control-group">
+        <label>${t('analysis.label.x_data_source')}</label>
+        <select id="sel-x-data-source" ${xDsOptions.length <= 1 ? 'disabled' : ''}>
+          ${xDsOptions.map((ds) => `<option value="${ds}" ${ds === currentXDataSource ? 'selected' : ''}>${dsLabel(ds)}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="control-group">
         <label>${t('analysis.label.y_axis')}</label>
         <select id="sel-y">
-          ${validAxes.map((a) => `<option value="${a.id}" ${a.id === currentY ? 'selected' : ''}>${getAxisLabel(a)}</option>`).join('')}
+          ${validYAxes.map((a) => `<option value="${a.id}" ${a.id === currentY ? 'selected' : ''}>${getAxisLabel(a)}</option>`).join('')}
         </select>
-        <span class="axis-desc" id="desc-y">${t('axisdesc.' + currentY)}</span>
+        <span class="axis-desc" id="desc-y">${tAxisDesc(currentY)}</span>
+      </div>
+      ${isAdvanced ? `<div class="control-group">
+        <label>${t('analysis.label.y_data_source')}</label>
+        <select id="sel-y-data-source" ${yDsOptions.length <= 1 ? 'disabled' : ''}>
+          ${yDsOptions.map((ds) => `<option value="${ds}" ${ds === currentYDataSource ? 'selected' : ''}>${dsLabel(ds)}</option>`).join('')}
+        </select>
       </div>
       <div class="control-group">
         <label>${t('analysis.label.color')}</label>
         <select id="sel-color">
           <option value="category_primary" ${currentColor === 'category_primary' ? 'selected' : ''}>${t('analysis.color.category')}</option>
           <option value="brand_name_en" ${currentColor === 'brand_name_en' ? 'selected' : ''}>${t('analysis.color.brand')}</option>
+          <option value="source_type" ${currentColor === 'source_type' ? 'selected' : ''}>${t('analysis.color.source_type')}</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>${t('analysis.label.symbol')}</label>
+        <select id="sel-symbol">
+          <option value="none" ${currentSymbol === 'none' ? 'selected' : ''}>${t('analysis.symbol.none')}</option>
+          <option value="category_primary" ${currentSymbol === 'category_primary' ? 'selected' : ''}>${t('analysis.color.category')}</option>
+          <option value="brand_name_en" ${currentSymbol === 'brand_name_en' ? 'selected' : ''}>${t('analysis.color.brand')}</option>
+          <option value="source_type" ${currentSymbol === 'source_type' ? 'selected' : ''}>${t('analysis.color.source_type')}</option>
         </select>
       </div>
       <div class="controls-break"></div>
       <div class="control-group">
-        <label>${t('analysis.label.keyword')}</label>
-        <input type="text" id="input-keyword" value="${currentKeyword.replace(/"/g, '&quot;')}"
-               placeholder="${t('analysis.label.keyword_placeholder')}"
-               style="min-width:260px">
+        <label>${t('analysis.label.labels')}</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-labels" ${currentLabels ? 'checked' : ''}>
+            ${t('analysis.label.show_labels')}
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-labels-pareto" ${currentLabelsPareto ? 'checked' : ''}${currentLabels ? '' : ' disabled'}>
+            ${t('analysis.label.labels_pareto_only')}
+          </label>
+        </div>
       </div>
       <div class="control-group">
         <label>${t('analysis.label.option')}</label>
@@ -204,20 +330,7 @@ export async function renderAnalysis(
             ${t('analysis.label.show_better')}
           </label>
         </div>
-      </div>
-      <div class="control-group">
-        <label>${t('analysis.label.labels')}</label>
-        <div class="checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="chk-labels" ${currentLabels ? 'checked' : ''}>
-            ${t('analysis.label.show_labels')}
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="chk-labels-pareto" ${currentLabelsPareto ? 'checked' : ''}${currentLabels ? '' : ' disabled'}>
-            ${t('analysis.label.labels_pareto_only')}
-          </label>
-        </div>
-      </div>
+      </div>` : ''}
     `;
 
     document.getElementById('sel-cat')!.addEventListener('change', (e) => {
@@ -229,24 +342,51 @@ export async function renderAnalysis(
       renderPresets();
       renderPlot();
     });
-    document.getElementById('sel-x')!.addEventListener('change', (e) => {
+    document.getElementById('sel-x')!.addEventListener('change', async (e) => {
       currentX = (e.target as HTMLSelectElement).value;
-      document.getElementById('desc-x')!.textContent = t('axisdesc.' + currentX);
       currentPreset = undefined;
       syncUrl();
+      // Rebuild controls so the X data-source dropdown reflects the new axis kind.
+      await renderControls();
       renderPresets();
       renderPlot();
     });
-    document.getElementById('sel-y')!.addEventListener('change', (e) => {
+    document.getElementById('sel-y')!.addEventListener('change', async (e) => {
       currentY = (e.target as HTMLSelectElement).value;
-      document.getElementById('desc-y')!.textContent = t('axisdesc.' + currentY);
       currentPreset = undefined;
       syncUrl();
+      // Rebuild controls so the Y data-source dropdown reflects the new axis kind.
+      await renderControls();
       renderPresets();
       renderPlot();
     });
-    document.getElementById('sel-color')!.addEventListener('change', (e) => {
+    document.getElementById('sel-x-data-source')?.addEventListener('change', async (e) => {
+      currentXDataSource = (e.target as HTMLSelectElement).value as XDataSource;
+      if (currentPreset && !axisMatchesDataSource(currentPreset.x, currentXDataSource)) {
+        currentPreset = undefined;
+      }
+      syncUrl();
+      await renderControls();
+      renderPresets();
+      renderPlot();
+    });
+    document.getElementById('sel-y-data-source')?.addEventListener('change', async (e) => {
+      currentYDataSource = (e.target as HTMLSelectElement).value as YDataSource;
+      if (currentPreset && !axisMatchesDataSource(currentPreset.y, currentYDataSource)) {
+        currentPreset = undefined;
+      }
+      syncUrl();
+      await renderControls();
+      renderPresets();
+      renderPlot();
+    });
+    document.getElementById('sel-color')?.addEventListener('change', (e) => {
       currentColor = (e.target as HTMLSelectElement).value;
+      syncUrl();
+      renderPlot();
+    });
+    document.getElementById('sel-symbol')?.addEventListener('change', (e) => {
+      currentSymbol = (e.target as HTMLSelectElement).value;
       syncUrl();
       renderPlot();
     });
@@ -261,25 +401,25 @@ export async function renderAnalysis(
       }, 300);
     });
 
-    document.getElementById('chk-show-correlation')!.addEventListener('change', (e) => {
+    document.getElementById('chk-show-correlation')?.addEventListener('change', (e) => {
       currentShowCorrelation = (e.target as HTMLInputElement).checked;
       syncUrl();
       renderPlot();
     });
 
-    document.getElementById('chk-show-pareto')!.addEventListener('change', (e) => {
+    document.getElementById('chk-show-pareto')?.addEventListener('change', (e) => {
       currentShowPareto = (e.target as HTMLInputElement).checked;
       syncUrl();
       renderPlot();
     });
 
-    document.getElementById('chk-show-better')!.addEventListener('change', (e) => {
+    document.getElementById('chk-show-better')?.addEventListener('change', (e) => {
       currentShowBetter = (e.target as HTMLInputElement).checked;
       syncUrl();
       renderPlot();
     });
 
-    document.getElementById('chk-labels')!.addEventListener('change', (e) => {
+    document.getElementById('chk-labels')?.addEventListener('change', (e) => {
       currentLabels = (e.target as HTMLInputElement).checked;
       const paretoChk = document.getElementById('chk-labels-pareto') as HTMLInputElement;
       paretoChk.disabled = !currentLabels;
@@ -287,7 +427,7 @@ export async function renderAnalysis(
       renderPlot();
     });
 
-    document.getElementById('chk-labels-pareto')!.addEventListener('change', (e) => {
+    document.getElementById('chk-labels-pareto')?.addEventListener('change', (e) => {
       currentLabelsPareto = (e.target as HTMLInputElement).checked;
       syncUrl();
       renderPlot();
@@ -296,7 +436,10 @@ export async function renderAnalysis(
 
   function renderPresets(): void {
     const cats = effectiveCats();
-    const available = getPresetsForCategories(cats);
+    const available = getPresetsForCategories(cats).filter(
+      (p) => axisMatchesDataSource(p.x, currentXDataSource)
+        && axisMatchesDataSource(p.y, currentYDataSource),
+    );
     presetsEl.innerHTML = available
       .map((p) => {
         const purpose = getPresetPurpose(p);
@@ -340,6 +483,9 @@ export async function renderAnalysis(
     y_val_raw: number;
     brand_name_en: string;
     price_anchor_usd: number | null;
+    source_type: string;
+    x_src: string;
+    y_src: string;
   };
   const _rowType: RowType = undefined as unknown as RowType;
 
@@ -351,26 +497,129 @@ export async function renderAnalysis(
     const cats = effectiveCats();
     const catPlaceholders = cats.map(() => '?').join(',');
 
-    const xSource = xAxis.source || xAxis.id;
-    const ySource = yAxis.source || yAxis.id;
+    // Resolve per-axis source expressions honoring the data-source setting.
+    // Only Y axis supports 'both' (UNION across spec/measured branches).
+    const xSource = resolveAxisSource(currentX, currentXDataSource);
+    const ySourceResolved = currentYDataSource === 'both'
+      ? resolveAxisSource(currentY, 'best') // placeholder; actual per-branch below
+      : resolveAxisSource(currentY, currentYDataSource);
+    const yHasVariants = axisHasSourceVariants(currentY);
+    const useBoth = currentYDataSource === 'both' && yHasVariants;
 
-    const sql = `
+    const xKind = getAxisSourceKind(currentX);
+    const yKind = getAxisSourceKind(currentY);
+
+    // Per-axis source-type literal columns used for hover display and coloring.
+    // 'meta' for non-variant-capable axes (price/year/etc.), explicit for
+    // spec/measured, or CASE-derived for best mode on multi-source axes.
+    function xSrcLiteralExpr(): string {
+      if (xKind === 'meta') return "'meta' as x_src";
+      if (currentXDataSource === 'spec') return "'spec' as x_src";
+      if (currentXDataSource === 'measured') return "'measured' as x_src";
+      // best mode
+      if (xKind === 'multi') {
+        return `CASE
+          WHEN p.${currentX}_measured IS NOT NULL THEN 'measured'
+          WHEN p.${currentX}_spec     IS NOT NULL THEN 'spec'
+          ELSE 'unknown'
+        END as x_src`;
+      }
+      // fixed measured/spec kind with best mode
+      return `'${xKind}' as x_src`;
+    }
+    function ySrcLiteralExpr(fixed?: 'spec' | 'measured'): string {
+      if (fixed) return `'${fixed}' as y_src`;
+      if (yKind === 'meta') return "'meta' as y_src";
+      if (currentYDataSource === 'spec') return "'spec' as y_src";
+      if (currentYDataSource === 'measured') return "'measured' as y_src";
+      if (currentYDataSource === 'best') {
+        if (yKind === 'multi') {
+          return `CASE
+            WHEN p.${currentY}_measured IS NOT NULL THEN 'measured'
+            WHEN p.${currentY}_spec     IS NOT NULL THEN 'spec'
+            ELSE 'unknown'
+          END as y_src`;
+        }
+        return `'${yKind}' as y_src`;
+      }
+      // 'both' — caller supplies the branch literal via `fixed`
+      return "'unknown' as y_src";
+    }
+
+    // Legacy `source_type` column (used by color/symbol grouping) — prefer
+    // y_src when Y is a variant-capable axis, otherwise fall back to x_src.
+    function sourceTypeExpr(yOverride?: 'spec' | 'measured'): string {
+      const y = yOverride ? `'${yOverride}'` : (yKind === 'meta' ? 'NULL' : ySrcColumn(yOverride));
+      const x = xKind === 'meta' ? 'NULL' : xSrcColumn();
+      return `coalesce(${y}, ${x}, 'unknown') as source_type`;
+    }
+    function xSrcColumn(): string {
+      if (xKind === 'meta') return 'NULL';
+      if (currentXDataSource === 'spec') return "'spec'";
+      if (currentXDataSource === 'measured') return "'measured'";
+      if (xKind === 'multi') {
+        return `CASE
+          WHEN p.${currentX}_measured IS NOT NULL THEN 'measured'
+          WHEN p.${currentX}_spec     IS NOT NULL THEN 'spec'
+          ELSE NULL
+        END`;
+      }
+      return `'${xKind}'`;
+    }
+    function ySrcColumn(yOverride?: 'spec' | 'measured'): string {
+      if (yOverride) return `'${yOverride}'`;
+      if (yKind === 'meta') return 'NULL';
+      if (currentYDataSource === 'spec') return "'spec'";
+      if (currentYDataSource === 'measured') return "'measured'";
+      if (currentYDataSource === 'best' && yKind === 'multi') {
+        return `CASE
+          WHEN p.${currentY}_measured IS NOT NULL THEN 'measured'
+          WHEN p.${currentY}_spec     IS NOT NULL THEN 'spec'
+          ELSE NULL
+        END`;
+      }
+      if (currentYDataSource === 'best') return `'${yKind}'`;
+      return 'NULL';
+    }
+
+    const buildBranchSql = (
+      xSrc: string,
+      ySrc: string,
+      yOverride?: 'spec' | 'measured',
+    ): string => `
       SELECT
         p.product_id,
         CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
         p.product_name,
         p.category_primary,
-        ${xSource} as x_val,
-        ${ySource} as y_val,
+        ${xSrc} as x_val,
+        ${ySrc} as y_val,
         p.brand_name_en,
-        coalesce(p.street_price_usd, p.msrp_usd) as price_anchor_usd
+        coalesce(p.street_price_usd, p.msrp_usd) as price_anchor_usd,
+        ${xSrcLiteralExpr()},
+        ${ySrcLiteralExpr(yOverride)},
+        ${sourceTypeExpr(yOverride)}
       FROM web_product_core p
       WHERE p.category_primary IN (${catPlaceholders})
-        AND x_val IS NOT NULL
-        AND y_val IS NOT NULL
+        AND (${xSrc}) IS NOT NULL
+        AND (${ySrc}) IS NOT NULL
     `;
 
-    let rows = clampForScatter(await query<RowType>(sql, cats), currentX, currentY);
+    let sql: string;
+    let sqlParams: unknown[];
+    if (useBoth) {
+      const ySpec = resolveAxisSource(currentY, 'spec');
+      const yMeas = resolveAxisSource(currentY, 'measured');
+      sql = `${buildBranchSql(xSource, ySpec, 'spec')}
+        UNION ALL
+        ${buildBranchSql(xSource, yMeas, 'measured')}`;
+      sqlParams = [...cats, ...cats];
+    } else {
+      sql = buildBranchSql(xSource, ySourceResolved);
+      sqlParams = [...cats];
+    }
+
+    let rows = clampForScatter(await query<RowType>(sql, sqlParams), currentX, currentY);
 
     // Filter by keyword if set
     if (currentKeyword) {
@@ -381,8 +630,13 @@ export async function renderAnalysis(
       );
     }
 
-    // Show warning if few points
-    if (rows.length < 10) {
+    // Show warning if few points (or none)
+    if (rows.length === 0) {
+      warningEl.innerHTML = `<div class="banner warning">${t('analysis.warning.no_points')}</div>`;
+      Plotly.purge('scatter-plot');
+      traceRows = [];
+      return;
+    } else if (rows.length < 10) {
       warningEl.innerHTML = `<div class="banner warning">${t('analysis.warning.few_points', { count: rows.length })}</div>`;
     } else if (rows.length < 20) {
       warningEl.innerHTML = `<div class="banner info">${t('analysis.info.limited', { count: rows.length })}</div>`;
@@ -390,15 +644,90 @@ export async function renderAnalysis(
       warningEl.innerHTML = '';
     }
 
-    // Group by color dimension
-    const colorField = currentColor as 'category_primary' | 'brand_name_en';
-    const groups = new Map<string, typeof rows>();
+    // Resolve grouping key for a row given a dimension field
+    type DimField = 'category_primary' | 'brand_name_en' | 'source_type' | 'none';
+    function dimKey(row: RowType, field: DimField): string {
+      if (field === 'category_primary') return row.category_primary;
+      if (field === 'brand_name_en') return row.brand_label || t('common.unknown');
+      if (field === 'source_type') return row.source_type || 'unknown';
+      return 'all';
+    }
+    function dimLabel(key: string, field: DimField): string {
+      if (field === 'category_primary') return getCategoryLabel(key);
+      if (field === 'source_type') return t('analysis.source_type.' + key);
+      return key;
+    }
+
+    const colorField = currentColor as DimField;
+    const symbolField = currentSymbol as DimField;
+    const sameField = colorField === symbolField && symbolField !== 'none';
+
+    // First-level color groups
+    const colorGroups = new Map<string, typeof rows>();
     for (const row of rows) {
-      let key: string;
-      if (colorField === 'category_primary') key = row.category_primary;
-      else key = row.brand_label || t('common.unknown');
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(row);
+      const key = dimKey(row, colorField);
+      if (!colorGroups.has(key)) colorGroups.set(key, []);
+      colorGroups.get(key)!.push(row);
+    }
+
+    // Limit brand colors to top N — rest go into "Other" bucket
+    let limitedColorGroups: Array<[string, RowType[]]>;
+    let otherRows: RowType[] = [];
+    if (colorField === 'brand_name_en' && colorGroups.size > 15) {
+      const sorted = [...colorGroups.entries()].sort((a, b) => b[1].length - a[1].length);
+      limitedColorGroups = sorted.slice(0, 12);
+      otherRows = sorted.slice(12).flatMap(([, v]) => v);
+    } else {
+      limitedColorGroups = [...colorGroups.entries()];
+    }
+
+    // Plotly default colorway — used to explicitly assign colors to brand
+    // traces so that connecting lines (useBoth mode) can match marker color.
+    const PLOTLY_DEFAULT_COLORS = [
+      '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+    ];
+
+    // Resolve color & symbol for a key
+    function resolveColor(key: string, isOther = false): string | undefined {
+      if (isOther) return '#999';
+      if (colorField === 'category_primary') return CATEGORY_COLORS[key];
+      if (colorField === 'source_type') return SOURCE_TYPE_COLORS[key];
+      return undefined; // brand → let plotly auto-color
+    }
+
+    // Build an explicit color-group → color map. For brand mode (auto-coloring)
+    // we assign from the default Plotly colorway in color-group order so that
+    // matching line traces can reuse the exact same color.
+    const colorGroupColorMap = new Map<string, string>();
+    {
+      let brandColorIdx = 0;
+      for (const [colorKey] of limitedColorGroups) {
+        const c = resolveColor(colorKey);
+        if (c) {
+          colorGroupColorMap.set(colorKey, c);
+        } else {
+          colorGroupColorMap.set(
+            colorKey,
+            PLOTLY_DEFAULT_COLORS[brandColorIdx % PLOTLY_DEFAULT_COLORS.length],
+          );
+          brandColorIdx++;
+        }
+      }
+      if (otherRows.length) colorGroupColorMap.set('__other__', '#999');
+    }
+    // For brand symbols, build a stable key→symbol map by brand frequency order
+    const brandSymbolMap = new Map<string, string>();
+    if (symbolField === 'brand_name_en') {
+      const brands = [...new Set(rows.map((r) => r.brand_label || t('common.unknown')))];
+      brands.forEach((b, i) => brandSymbolMap.set(b, BRAND_SYMBOL_CYCLE[i % BRAND_SYMBOL_CYCLE.length]));
+    }
+    function resolveSymbol(key: string): string | undefined {
+      if (symbolField === 'none') return undefined;
+      if (symbolField === 'category_primary') return CATEGORY_SYMBOLS[key] || 'circle';
+      if (symbolField === 'source_type') return SOURCE_TYPE_SYMBOLS[key] || 'x';
+      if (symbolField === 'brand_name_en') return brandSymbolMap.get(key) || 'circle';
+      return undefined;
     }
 
     // Compute Pareto frontier (used for both the frontier line and pareto-only labels)
@@ -407,23 +736,114 @@ export async function renderAnalysis(
       ? new Set(pareto.map((p) => `${p.x},${p.y}`))
       : null;
 
-    // Limit brand colors to top N, rest as "Other"
-    let traces: Data[];
+    // Build traces by (color, symbol) pairs
+    const traces: Data[] = [];
     traceRows = [];
-    if (colorField === 'brand_name_en' && groups.size > 15) {
-      const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-      const top = sorted.slice(0, 12);
-      const rest = sorted.slice(12).flatMap(([, v]) => v);
-      traces = top.map(([name, data]) => { traceRows.push(data); return makeTrace(name, data, xAxis, yAxis, undefined, currentLabels, paretoSet); });
-      if (rest.length) { traceRows.push(rest); traces.push(makeTrace('Other', rest, xAxis, yAxis, '#999', currentLabels, paretoSet)); }
-    } else {
-      traces = [...groups.entries()].map(([name, data]) => {
+    const xAxisDef = xAxis;
+    const yAxisDef = yAxis;
+
+    function emitTraces(colorKey: string, data: RowType[], isOther: boolean): void {
+      const color = isOther
+        ? '#999'
+        : (colorGroupColorMap.get(colorKey) ?? resolveColor(colorKey, isOther));
+      const colorDisplay = isOther ? 'Other' : dimLabel(colorKey, colorField);
+
+      if (symbolField === 'none' || sameField) {
+        // No symbol grouping (or same field as color → identical groups)
+        const symbol = sameField ? resolveSymbol(colorKey) : undefined;
         traceRows.push(data);
-        const color = colorField === 'category_primary' ? CATEGORY_COLORS[name] : undefined;
-        const displayName = colorField === 'category_primary' ? getCategoryLabel(name) : name;
-        return makeTrace(displayName, data, xAxis, yAxis, color, currentLabels, paretoSet);
-      });
+        traces.push(makeTrace(colorDisplay, data, xAxisDef, yAxisDef, color, currentLabels, paretoSet, symbol));
+        return;
+      }
+
+      // Sub-group by symbol field
+      const subGroups = new Map<string, RowType[]>();
+      for (const row of data) {
+        const k = dimKey(row, symbolField);
+        if (!subGroups.has(k)) subGroups.set(k, []);
+        subGroups.get(k)!.push(row);
+      }
+      for (const [symKey, subData] of subGroups) {
+        const symbol = resolveSymbol(symKey);
+        const symDisplay = dimLabel(symKey, symbolField);
+        const name = `${colorDisplay} – ${symDisplay}`;
+        traceRows.push(subData);
+        traces.push(makeTrace(name, subData, xAxisDef, yAxisDef, color, currentLabels, paretoSet, symbol));
+      }
     }
+
+    for (const [colorKey, data] of limitedColorGroups) {
+      emitTraces(colorKey, data, false);
+    }
+    if (otherRows.length) {
+      emitTraces('__other__', otherRows, true);
+    }
+
+    // Cap total legend entries: when color × symbol produces too many traces,
+    // the horizontal legend grows unboundedly downward. Merge the smallest
+    // traces into a single grey "Other" bucket once we exceed the cap.
+    const MAX_LEGEND_TRACES = 16;
+    if (traces.length > MAX_LEGEND_TRACES) {
+      const indexed = traces.map((tr, i) => ({ tr, rows: traceRows[i], idx: i }));
+      indexed.sort((a, b) => b.rows.length - a.rows.length);
+      const keep = indexed.slice(0, MAX_LEGEND_TRACES - 1).sort((a, b) => a.idx - b.idx);
+      const merge = indexed.slice(MAX_LEGEND_TRACES - 1);
+      const mergedRows = merge.flatMap((m) => m.rows);
+      traces.length = 0;
+      traceRows = [];
+      for (const { tr, rows: r } of keep) {
+        traces.push(tr);
+        traceRows.push(r);
+      }
+      traces.push(makeTrace('Other', mergedRows, xAxisDef, yAxisDef, '#999', currentLabels, paretoSet));
+      traceRows.push(mergedRows);
+    }
+
+    // When Y axis shows both manufacturer spec and third-party measured values,
+    // draw a connecting line between the two points for each product that has
+    // both. The line uses the same color as the color group's markers so the
+    // pairing is visually unambiguous.
+    if (useBoth) {
+      const colorGroupsForLines: Array<[string, RowType[]]> = [
+        ...limitedColorGroups,
+        ...(otherRows.length ? [['__other__', otherRows] as [string, RowType[]]] : []),
+      ];
+      // Insert in reverse so final order matches colorGroupsForLines, and all
+      // line traces end up below the marker traces (drawn first → behind).
+      for (let i = colorGroupsForLines.length - 1; i >= 0; i--) {
+        const [colorKey, groupRows] = colorGroupsForLines[i];
+        const byPid = new Map<string, RowType[]>();
+        for (const r of groupRows) {
+          if (!byPid.has(r.product_id)) byPid.set(r.product_id, []);
+          byPid.get(r.product_id)!.push(r);
+        }
+        const xs: (number | null)[] = [];
+        const ys: (number | null)[] = [];
+        for (const group of byPid.values()) {
+          if (group.length < 2) continue;
+          const spec = group.find((r) => r.y_src === 'spec');
+          const meas = group.find((r) => r.y_src === 'measured');
+          if (!spec || !meas) continue;
+          xs.push(spec.x_val, meas.x_val, null);
+          ys.push(spec.y_val, meas.y_val, null);
+        }
+        if (xs.length === 0) continue;
+        const lineColor = colorGroupColorMap.get(colorKey) || '#888';
+        traces.unshift({
+          x: xs,
+          y: ys,
+          mode: 'lines',
+          type: 'scatter',
+          line: { color: lineColor, width: 1 },
+          opacity: 0.6,
+          showlegend: false,
+          hoverinfo: 'skip',
+          connectgaps: false,
+        } as Data);
+        traceRows.unshift([]);
+      }
+    }
+
     if (pareto && currentShowPareto) {
       traces.unshift({
         x: pareto.map((p) => p.x),
@@ -439,8 +859,51 @@ export async function renderAnalysis(
       traceRows.unshift([]);
     }
 
-    const xLabel = getAxisLabel(xAxis);
-    const yLabel = getAxisLabel(yAxis);
+    // Identity (y=x) diagonal when X and Y are the same base metric with
+    // different data sources (e.g., manufacturer spec vs third-party measured).
+    // Lets the user visually gauge how closely measurements match published specs.
+    const isIdentityComparison =
+      currentX === currentY
+      && (currentXDataSource === 'spec' || currentXDataSource === 'measured')
+      && (currentYDataSource === 'spec' || currentYDataSource === 'measured')
+      && currentXDataSource !== currentYDataSource;
+    if (isIdentityComparison && rows.length >= 2) {
+      const all = rows.flatMap((r) => [r.x_val, r.y_val]);
+      const values = xAxis.scale === 'log' ? all.filter((v) => v > 0) : all;
+      if (values.length >= 2) {
+        const lo = Math.min(...values);
+        const hi = Math.max(...values);
+        if (lo < hi) {
+          traces.unshift({
+            x: [lo, hi],
+            y: [lo, hi],
+            mode: 'lines',
+            type: 'scatter',
+            name: 'y = x',
+            line: { color: 'rgba(120,120,180,0.55)', width: 2, dash: 'dash' },
+            hoverinfo: 'skip',
+            showlegend: false,
+          } as Data);
+          traceRows.unshift([]);
+        }
+      }
+    }
+
+    // Append the data-source label (manufacturer spec / third-party measured)
+    // to the axis title when the user has locked the axis to a specific source.
+    // Only meaningful for axes that actually have a source-type concept.
+    const axisLabelWithSource = (
+      axis: typeof xAxis,
+      baseId: string,
+      ds: DataSource,
+    ): string => {
+      const base = getAxisLabel(axis);
+      if (ds !== 'spec' && ds !== 'measured') return base;
+      if (getAxisSourceKind(baseId) === 'meta') return base;
+      return `${base} (${t('analysis.source_type.' + ds)})`;
+    };
+    const xLabel = axisLabelWithSource(xAxis, currentX, currentXDataSource);
+    const yLabel = axisLabelWithSource(yAxis, currentY, currentYDataSource);
     // Keep Plotly text (and label spacing) in sync with the app-wide font scale.
     // We treat the original base as 14px to derive the current scale.
     const baseFontPx = 14;
@@ -740,8 +1203,11 @@ export async function renderAnalysis(
     sessionStorage.removeItem(STORAGE_KEY);
     currentPreset = PRESETS.find((p) => p.id === 'msrp_vs_sinad');
     currentX = currentPreset?.x || 'price_anchor_usd';
-    currentY = currentPreset?.y || 'perf_sinad_db';
+    currentY = currentPreset?.y || 'sinad_db';
     currentColor = currentPreset?.color || 'category_primary';
+    currentSymbol = 'none';
+    currentXDataSource = 'best';
+    currentYDataSource = 'best';
     selectedCats = [];
     currentKeyword = '';
     currentLabels = false;
@@ -754,6 +1220,19 @@ export async function renderAnalysis(
     renderPresets();
     await renderPlot();
   });
+
+  // Basic/Advanced mode toggle — persists in localStorage, untouched by Reset.
+  async function setUiMode(mode: UiMode): Promise<void> {
+    if (mode === uiMode) return;
+    uiMode = mode;
+    saveUiMode(mode);
+    document.getElementById('mode-basic')?.classList.toggle('active', mode === 'basic');
+    document.getElementById('mode-advanced')?.classList.toggle('active', mode === 'advanced');
+    await renderControls();
+    renderPlot();
+  }
+  document.getElementById('mode-basic')!.addEventListener('click', () => setUiMode('basic'));
+  document.getElementById('mode-advanced')!.addEventListener('click', () => setUiMode('advanced'));
 
   await renderControls();
   renderPresets();
@@ -802,19 +1281,29 @@ function makeTrace(
     brand_label: string;
     product_name: string;
     price_anchor_usd: number | null;
+    source_type?: string;
+    x_src?: string;
+    y_src?: string;
   }>,
   xAxis: AxisInfo,
   yAxis: AxisInfo,
   color?: string,
   showLabels?: boolean,
   paretoSet?: Set<string> | null,
+  symbol?: string,
 ): Data {
   const xLabel = getAxisLabel(xAxis as import('../presets').AxisDef);
   const yLabel = getAxisLabel(yAxis as import('../presets').AxisDef);
+  const srcAnnot = (src: string | undefined): string => {
+    if (!src || src === 'meta' || src === 'unknown') return '';
+    // Only annotate when we actually know it came from spec or measured.
+    if (src !== 'spec' && src !== 'measured') return '';
+    return ` (${t('analysis.source_type.' + src)})`;
+  };
   const hoverTexts = data.map((d) => {
     const isPriceAxis = xAxis.id === 'price_anchor_usd' || xAxis.id === 'msrp_usd'
       || yAxis.id === 'price_anchor_usd' || yAxis.id === 'msrp_usd';
-    let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val_raw, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val_raw, yAxis)}`;
+    let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val_raw, xAxis)}${srcAnnot(d.x_src)}<br>${yLabel}: ${fmtAxis(d.y_val_raw, yAxis)}${srcAnnot(d.y_src)}`;
     if (!isPriceAxis) {
       tip += `<br>${t('common.price')}: ${d.price_anchor_usd ? '$' + d.price_anchor_usd.toLocaleString() : t('common.na')}`;
     }
@@ -832,6 +1321,7 @@ function makeTrace(
       size: 7,
       opacity: 0.75,
       ...(color ? { color } : {}),
+      ...(symbol ? { symbol } : {}),
     },
     hovertext: hoverTexts,
     hoverinfo: 'text',

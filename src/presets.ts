@@ -29,64 +29,100 @@ export const AXES: AxisDef[] = [
   { id: 'msrp_usd', source: 'msrp_usd', label: 'MSRP', scale: 'log', better: 'lower' },
   { id: 'release_year', source: 'release_year', label: 'Release Year', scale: 'year', better: 'higher' },
   // Perf
-  { id: 'perf_sinad_db', source: 'perf_sinad_db', label: 'SINAD (dB)', scale: 'linear', better: 'higher' },
-  { id: 'perf_snr_db', source: 'perf_snr_db', label: 'SNR (dB)', scale: 'linear', better: 'higher' },
-  { id: 'perf_thd_percent', source: 'perf_thd_percent', label: 'THD (%)', scale: 'log', better: 'lower' },
-  { id: 'perf_dynamic_range_db', source: 'perf_dynamic_range_db', label: 'Dynamic Range (dB)', scale: 'linear', better: 'higher' },
-  { id: 'perf_crosstalk_db', source: 'perf_crosstalk_db', label: 'Crosstalk (dB)', scale: 'linear', better: 'lower' },
+  { id: 'sinad_db', source: 'sinad_db', label: 'SINAD (dB)', scale: 'linear', better: 'higher' },
+  { id: 'snr_db', source: 'snr_db', label: 'SNR (dB)', scale: 'linear', better: 'higher' },
+  { id: 'snr_db_measured', source: 'snr_db_measured', label: 'SNR measured (dB)', scale: 'linear', better: 'higher' },
+  { id: 'snr_db_spec', source: 'snr_db_spec', label: 'SNR spec (dB)', scale: 'linear', better: 'higher' },
+  { id: 'thd_percent', source: 'thd_percent', label: 'THD (%)', scale: 'log', better: 'lower' },
+  { id: 'thd_percent_measured', source: 'thd_percent_measured', label: 'THD measured (%)', scale: 'log', better: 'lower' },
+  { id: 'thd_percent_spec', source: 'thd_percent_spec', label: 'THD spec (%)', scale: 'log', better: 'lower' },
+  { id: 'dynamic_range_db', source: 'dynamic_range_db', label: 'Dynamic Range (dB)', scale: 'linear', better: 'higher' },
+  { id: 'dynamic_range_db_measured', source: 'dynamic_range_db_measured', label: 'Dynamic Range measured (dB)', scale: 'linear', better: 'higher' },
+  { id: 'dynamic_range_db_spec', source: 'dynamic_range_db_spec', label: 'Dynamic Range spec (dB)', scale: 'linear', better: 'higher' },
+  { id: 'crosstalk_db', source: 'crosstalk_db', label: 'Crosstalk (dB)', scale: 'linear', better: 'lower' },
+  { id: 'crosstalk_db_measured', source: 'crosstalk_db_measured', label: 'Crosstalk measured (dB)', scale: 'linear', better: 'lower' },
+  { id: 'crosstalk_db_spec', source: 'crosstalk_db_spec', label: 'Crosstalk spec (dB)', scale: 'linear', better: 'lower' },
   // Spec / Driveability
-  { id: 'spec_impedance_ohm', source: 'spec_impedance_ohm', label: 'Impedance (Ω)', scale: 'log' },
+  { id: 'impedance_ohm', source: 'impedance_ohm', label: 'Impedance (Ω)', scale: 'log' },
+  { id: 'impedance_ohm_measured', source: 'impedance_ohm_measured', label: 'Impedance measured (Ω)', scale: 'log' },
+  { id: 'impedance_ohm_spec', source: 'impedance_ohm_spec', label: 'Impedance spec (Ω)', scale: 'log' },
+  { id: 'sensitivity_db_per_mw', source: 'sensitivity_db_per_mw', label: 'Sensitivity (dB/mW)', scale: 'linear', better: 'higher' },
+  { id: 'sensitivity_db_per_mw_measured', source: 'sensitivity_db_per_mw_measured', label: 'Sensitivity measured (dB/mW)', scale: 'linear', better: 'higher' },
+  { id: 'sensitivity_db_per_mw_spec', source: 'sensitivity_db_per_mw_spec', label: 'Sensitivity spec (dB/mW)', scale: 'linear', better: 'higher' },
+  { id: 'sensitivity_db_per_v', source: 'sensitivity_db_per_v', label: 'Sensitivity (dB/V)', scale: 'linear', better: 'higher' },
+  { id: 'sensitivity_db_per_v_measured', source: 'sensitivity_db_per_v_measured', label: 'Sensitivity measured (dB/V)', scale: 'linear', better: 'higher' },
+  { id: 'sensitivity_db_per_v_spec', source: 'sensitivity_db_per_v_spec', label: 'Sensitivity spec (dB/V)', scale: 'linear', better: 'higher' },
   { id: 'sensitivity_proxy_db', source: 'sensitivity_proxy_db', label: 'Sensitivity Proxy (dB)', scale: 'linear', better: 'higher' },
   { id: 'driveability_index', source: 'driveability_index', label: 'Driveability', scale: 'linear', better: 'higher' },
-  { id: 'spec_weight_g', source: 'spec_weight_g', label: 'Weight (g)', scale: 'log', better: 'lower' },
+  { id: 'weight_g', source: 'weight_g', label: 'Weight (g)', scale: 'log', better: 'lower' },
   { id: 'driver_total_count', source: 'driver_total_count', label: 'Driver Count', scale: 'linear' },
-  { id: 'spec_freq_low_hz', source: 'spec_freq_low_hz', label: 'Freq Low (Hz)', scale: 'log', better: 'lower' },
-  { id: 'spec_freq_high_hz', source: 'spec_freq_high_hz', label: 'Freq High (Hz)', scale: 'log', better: 'higher' },
+  { id: 'freq_low_hz', source: 'freq_low_hz', label: 'Freq Low (Hz)', scale: 'log', better: 'lower' },
+  { id: 'freq_low_hz_measured', source: 'freq_low_hz_measured', label: 'Freq Low measured (Hz)', scale: 'log', better: 'lower' },
+  { id: 'freq_low_hz_spec', source: 'freq_low_hz_spec', label: 'Freq Low spec (Hz)', scale: 'log', better: 'lower' },
+  { id: 'freq_high_hz', source: 'freq_high_hz', label: 'Freq High (Hz)', scale: 'log', better: 'higher' },
+  { id: 'freq_high_hz_measured', source: 'freq_high_hz_measured', label: 'Freq High measured (Hz)', scale: 'log', better: 'higher' },
+  { id: 'freq_high_hz_spec', source: 'freq_high_hz_spec', label: 'Freq High spec (Hz)', scale: 'log', better: 'higher' },
   // FR Harman (Headphone / IEM)
-  { id: 'perf_fr_harman_std_db', source: 'perf_fr_harman_std_db', label: 'FR Harman Std Dev (dB)', scale: 'linear', better: 'lower' },
-  { id: 'perf_fr_harman_avg_db', source: 'perf_fr_harman_avg_db', label: 'FR Harman Avg Dev (dB)', scale: 'linear', better: 'lower' },
+  { id: 'fr_harman_std_db', source: 'fr_harman_std_db', label: 'FR Harman Std Dev (dB)', scale: 'linear', better: 'lower' },
+  { id: 'fr_harman_avg_db', source: 'fr_harman_avg_db', label: 'FR Harman Avg Dev (dB)', scale: 'linear', better: 'lower' },
   // Spinorama Preference Score (Speaker)
-  { id: 'perf_preference_score', source: 'perf_preference_score', label: 'Preference Score', scale: 'linear', better: 'higher' },
-  { id: 'perf_preference_score_with_sub', source: 'perf_preference_score_with_sub', label: 'Pref Score (w/ Sub)', scale: 'linear', better: 'higher' },
-  { id: 'perf_preference_score_eq', source: 'perf_preference_score_eq', label: 'Pref Score (EQ)', scale: 'linear', better: 'higher' },
-  { id: 'perf_preference_score_eq_with_sub', source: 'perf_preference_score_eq_with_sub', label: 'Pref Score (EQ + Sub)', scale: 'linear', better: 'higher' },
+  { id: 'preference_score', source: 'preference_score', label: 'Preference Score', scale: 'linear', better: 'higher' },
+  { id: 'preference_score_with_sub', source: 'preference_score_with_sub', label: 'Pref Score (w/ Sub)', scale: 'linear', better: 'higher' },
+  { id: 'preference_score_eq', source: 'preference_score_eq', label: 'Pref Score (EQ)', scale: 'linear', better: 'higher' },
+  { id: 'preference_score_eq_with_sub', source: 'preference_score_eq_with_sub', label: 'Pref Score (EQ + Sub)', scale: 'linear', better: 'higher' },
   // Amp output
   { id: 'amp_power_mw_32ohm', source: 'amp_power_mw_32ohm', label: 'Headphone Output Power (mW @ 32Ω)', scale: 'log', better: 'higher' },
+  { id: 'amp_power_mw_32ohm_measured', source: 'amp_power_mw_32ohm_measured', label: 'Headphone Output Power measured (mW @ 32Ω)', scale: 'log', better: 'higher' },
+  { id: 'amp_power_mw_32ohm_spec', source: 'amp_power_mw_32ohm_spec', label: 'Headphone Output Power spec (mW @ 32Ω)', scale: 'log', better: 'higher' },
   { id: 'amp_power_w', source: 'amp_power_w', label: 'Speaker Output Power (W)', scale: 'log', better: 'higher' },
+  { id: 'amp_power_w_measured', source: 'amp_power_w_measured', label: 'Speaker Output Power measured (W)', scale: 'log', better: 'higher' },
+  { id: 'amp_power_w_spec', source: 'amp_power_w_spec', label: 'Speaker Output Power spec (W)', scale: 'log', better: 'higher' },
   { id: 'amp_voltage_vrms', source: 'amp_voltage_vrms', label: 'Output Voltage SE (Vrms)', scale: 'log', better: 'higher' },
+  { id: 'amp_voltage_vrms_measured', source: 'amp_voltage_vrms_measured', label: 'Output Voltage SE measured (Vrms)', scale: 'log', better: 'higher' },
+  { id: 'amp_voltage_vrms_spec', source: 'amp_voltage_vrms_spec', label: 'Output Voltage SE spec (Vrms)', scale: 'log', better: 'higher' },
   { id: 'amp_voltage_vrms_balanced', source: 'amp_voltage_vrms_balanced', label: 'Output Voltage BAL (Vrms)', scale: 'log', better: 'higher' },
-  { id: 'amp_output_impedance_ohm', source: 'amp_output_impedance_ohm', label: 'Output Impedance (Ω)', scale: 'log', better: 'lower' },
+  { id: 'amp_voltage_vrms_balanced_measured', source: 'amp_voltage_vrms_balanced_measured', label: 'Output Voltage BAL measured (Vrms)', scale: 'log', better: 'higher' },
+  { id: 'amp_voltage_vrms_balanced_spec', source: 'amp_voltage_vrms_balanced_spec', label: 'Output Voltage BAL spec (Vrms)', scale: 'log', better: 'higher' },
+  { id: 'amp_output_impedance_ohm', source: 'amp_output_impedance_ohm', label: 'HP Output Impedance (Ω)', scale: 'log', better: 'lower' },
+  { id: 'amp_output_impedance_ohm_measured', source: 'amp_output_impedance_ohm_measured', label: 'HP Output Impedance measured (Ω)', scale: 'log', better: 'lower' },
+  { id: 'amp_output_impedance_ohm_spec', source: 'amp_output_impedance_ohm_spec', label: 'HP Output Impedance spec (Ω)', scale: 'log', better: 'lower' },
+  { id: 'line_output_impedance_ohm', source: 'line_output_impedance_ohm', label: 'Line Output Impedance (Ω)', scale: 'log', better: 'lower' },
+  { id: 'line_output_impedance_ohm_measured', source: 'line_output_impedance_ohm_measured', label: 'Line Output Impedance measured (Ω)', scale: 'log', better: 'lower' },
+  { id: 'line_output_impedance_ohm_spec', source: 'line_output_impedance_ohm_spec', label: 'Line Output Impedance spec (Ω)', scale: 'log', better: 'lower' },
 ];
 
 export const PRESETS: Preset[] = [
   // DAC / amp
-  { id: 'msrp_vs_sinad', x: 'price_anchor_usd', y: 'perf_sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs measured quality' },
-  { id: 'msrp_vs_thd', x: 'price_anchor_usd', y: 'perf_thd_percent', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs distortion' },
-  { id: 'thd_vs_sinad', x: 'perf_thd_percent', y: 'perf_sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Correlation between perf metrics' },
-  { id: 'release_vs_sinad', x: 'release_year', y: 'perf_sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Technology evolution' },
+  { id: 'msrp_vs_sinad', x: 'price_anchor_usd', y: 'sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs measured quality' },
+  { id: 'msrp_vs_thd', x: 'price_anchor_usd', y: 'thd_percent', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs distortion' },
+  { id: 'thd_vs_sinad', x: 'thd_percent', y: 'sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Correlation between perf metrics' },
+  { id: 'release_vs_sinad', x: 'release_year', y: 'sinad_db', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Technology evolution' },
   // Headphone / IEM
-  { id: 'impedance_vs_sensitivity', x: 'spec_impedance_ohm', y: 'sensitivity_proxy_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Driveability overview' },
+  { id: 'impedance_vs_sensitivity', x: 'impedance_ohm', y: 'sensitivity_proxy_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Driveability overview' },
   { id: 'msrp_vs_driveability', x: 'price_anchor_usd', y: 'driveability_index', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs driveability' },
   { id: 'release_vs_driveability', x: 'release_year', y: 'driveability_index', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Era vs driveability' },
-  { id: 'msrp_vs_weight', x: 'price_anchor_usd', y: 'spec_weight_g', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs physical weight' },
+  { id: 'msrp_vs_weight', x: 'price_anchor_usd', y: 'weight_g', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs physical weight' },
   // FR Harman
-  { id: 'msrp_vs_harman_std', x: 'price_anchor_usd', y: 'perf_fr_harman_std_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs FR Harman deviation' },
-  { id: 'msrp_vs_harman_avg', x: 'price_anchor_usd', y: 'perf_fr_harman_avg_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs FR Harman avg deviation' },
+  { id: 'msrp_vs_harman_std', x: 'price_anchor_usd', y: 'fr_harman_std_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs FR Harman deviation' },
+  { id: 'msrp_vs_harman_avg', x: 'price_anchor_usd', y: 'fr_harman_avg_db', color: 'brand_name_en', categories: ['headphone', 'iem'], purpose: 'Price vs FR Harman avg deviation' },
   // Frequency range
-  { id: 'msrp_vs_freq_range', x: 'spec_freq_low_hz', y: 'spec_freq_high_hz', color: 'brand_name_en', categories: ['headphone', 'iem', 'speaker'], purpose: 'Frequency range overview' },
+  { id: 'msrp_vs_freq_range', x: 'freq_low_hz', y: 'freq_high_hz', color: 'brand_name_en', categories: ['headphone', 'iem', 'speaker'], purpose: 'Frequency range overview' },
   // Amp output
   { id: 'msrp_vs_power_32ohm', x: 'price_anchor_usd', y: 'amp_power_mw_32ohm', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs headphone output power' },
-  { id: 'msrp_vs_output_impedance', x: 'price_anchor_usd', y: 'amp_output_impedance_ohm', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs output impedance' },
+  { id: 'msrp_vs_output_impedance', x: 'price_anchor_usd', y: 'amp_output_impedance_ohm', color: 'brand_name_en', categories: ['dac', 'headphone_amp'], purpose: 'Price vs HP output impedance' },
+  { id: 'msrp_vs_line_output_impedance', x: 'price_anchor_usd', y: 'line_output_impedance_ohm', color: 'brand_name_en', categories: ['dac'], purpose: 'Price vs line output impedance' },
   { id: 'msrp_vs_speaker_power', x: 'price_anchor_usd', y: 'amp_power_w', color: 'brand_name_en', categories: ['speaker', 'speaker_amp'], purpose: 'Price vs speaker output power' },
   // Speaker — Spinorama Preference Score
-  { id: 'msrp_vs_preference', x: 'price_anchor_usd', y: 'perf_preference_score', color: 'brand_name_en', categories: ['speaker'], purpose: 'Price vs Spinorama preference' },
-  { id: 'msrp_vs_preference_sub', x: 'price_anchor_usd', y: 'perf_preference_score_with_sub', color: 'brand_name_en', categories: ['speaker'], purpose: 'Price vs Spinorama preference (w/ sub)' },
-  { id: 'preference_vs_preference_eq', x: 'perf_preference_score', y: 'perf_preference_score_eq', color: 'brand_name_en', categories: ['speaker'], purpose: 'EQ improvement on preference score' },
+  { id: 'msrp_vs_preference', x: 'price_anchor_usd', y: 'preference_score', color: 'brand_name_en', categories: ['speaker'], purpose: 'Price vs Spinorama preference' },
+  { id: 'msrp_vs_preference_sub', x: 'price_anchor_usd', y: 'preference_score_with_sub', color: 'brand_name_en', categories: ['speaker'], purpose: 'Price vs Spinorama preference (w/ sub)' },
+  { id: 'preference_vs_preference_eq', x: 'preference_score', y: 'preference_score_eq', color: 'brand_name_en', categories: ['speaker'], purpose: 'EQ improvement on preference score' },
 ];
 
-/** Get localized axis label */
+/** Get localized axis label (falls back to axis.label if no i18n entry) */
 export function getAxisLabel(axis: AxisDef): string {
-  return tAxis(axis.id);
+  const key = `axis.${axis.id}`;
+  const translated = tAxis(axis.id);
+  return translated === key ? axis.label : translated;
 }
 
 /** Get localized preset purpose */
@@ -103,9 +139,107 @@ export function getAxis(id: string): AxisDef | undefined {
   return AXES.find((a) => a.id === id);
 }
 
+export type DataSource = 'best' | 'both' | 'spec' | 'measured';
+/** X axis cannot use 'both' (only Y axis can, to avoid ambiguous 2×2 expansion). */
+export type XDataSource = 'best' | 'spec' | 'measured';
+export type YDataSource = DataSource;
+
+/** Data-source options available for the given axis, depending on X vs Y and axis kind. */
+export function validDataSourcesForAxis(baseId: string, isY: boolean): DataSource[] {
+  const kind = getAxisSourceKind(baseId);
+  if (kind === 'multi') {
+    return isY ? ['best', 'both', 'spec', 'measured'] : ['best', 'spec', 'measured'];
+  }
+  if (kind === 'measured') return ['best', 'measured'];
+  if (kind === 'spec') return ['best', 'spec'];
+  // meta: source setting is meaningless — expose only 'best'.
+  return ['best'];
+}
+
+/** Classification of an axis's data origin. */
+export type AxisSourceKind = 'meta' | 'multi' | 'measured' | 'spec';
+
+/**
+ * Axes that are always measured (no `_spec` counterpart, and the value
+ * intrinsically originates from third-party measurement).
+ */
+const FIXED_MEASURED_AXES = new Set<string>([
+  'sinad_db',
+  'sensitivity_proxy_db',
+  'driveability_index',
+  'fr_harman_std_db',
+  'fr_harman_avg_db',
+  'preference_score',
+  'preference_score_with_sub',
+  'preference_score_eq',
+  'preference_score_eq_with_sub',
+]);
+
+/**
+ * Axes that are always manufacturer-declared (no `_measured` counterpart).
+ */
+const FIXED_SPEC_AXES = new Set<string>([
+  'weight_g',
+  'driver_total_count',
+]);
+
+/** True if the given base axis has both `_measured` and `_spec` sibling variants in AXES. */
+export function axisHasSourceVariants(baseId: string): boolean {
+  return !!getAxis(`${baseId}_measured`) && !!getAxis(`${baseId}_spec`);
+}
+
+/** Classify an axis by its data-source origin. */
+export function getAxisSourceKind(baseId: string): AxisSourceKind {
+  if (axisHasSourceVariants(baseId)) return 'multi';
+  if (FIXED_MEASURED_AXES.has(baseId)) return 'measured';
+  if (FIXED_SPEC_AXES.has(baseId)) return 'spec';
+  return 'meta';
+}
+
+/** Whether a base axis is usable under the given data-source setting. */
+export function axisMatchesDataSource(baseId: string, ds: DataSource): boolean {
+  const kind = getAxisSourceKind(baseId);
+  if (ds === 'best' || ds === 'both') return true;
+  if (kind === 'meta' || kind === 'multi') return true;
+  return kind === ds;
+}
+
+/**
+ * Resolve the SQL source expression for a base axis id given a data-source choice.
+ * - 'best': use the base axis's own source expression (best-available column).
+ * - 'measured' / 'spec': use the corresponding variant column if variants exist.
+ *   For non-variant axes, returns the base expression if its fixed kind matches
+ *   the chosen data source (or is meta), otherwise returns 'NULL' so the row is
+ *   filtered out by the NOT NULL check.
+ * - 'both': caller should handle UNION across spec/measured; this returns the base expression as a fallback.
+ */
+export function resolveAxisSource(baseId: string, ds: DataSource): string {
+  const base = getAxis(baseId);
+  const baseExpr = base?.source || baseId;
+  if (ds === 'best' || ds === 'both') return baseExpr;
+  if (axisHasSourceVariants(baseId)) {
+    const variantId = `${baseId}_${ds}`;
+    const variant = getAxis(variantId);
+    return variant?.source || baseExpr;
+  }
+  const kind = getAxisSourceKind(baseId);
+  if (kind === 'meta' || kind === ds) return baseExpr;
+  return 'NULL';
+}
+
+/** Axis ids that are variant (measured/spec) — excluded from the Analysis dropdown. */
+export function isVariantAxisId(id: string): boolean {
+  return /_(measured|spec)$/.test(id);
+}
+
 /** Axes whose 0 values should be clamped to a floor for log-scale display */
 const LOG_CLAMP_AXES: Record<string, number> = {
   amp_output_impedance_ohm: 0.01,
+  amp_output_impedance_ohm_measured: 0.01,
+  amp_output_impedance_ohm_spec: 0.01,
+  line_output_impedance_ohm: 0.01,
+  line_output_impedance_ohm_measured: 0.01,
+  line_output_impedance_ohm_spec: 0.01,
 };
 
 /**

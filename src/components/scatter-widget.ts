@@ -18,11 +18,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 function fmtAxis(v: number, axis: { id?: string; scale: string }): string {
   if (axis.scale === 'year') return Math.round(v).toString();
-  if (v === 0) return axis.id === 'amp_output_impedance_ohm' ? '≈0' : '0';
-  if (axis.id === 'spec_weight_g' && v > 1000) {
+  if (v === 0 && axis.id && /^(amp|line)_output_impedance_ohm(_measured|_spec)?$/.test(axis.id)) return '≈0';
+  if (v === 0) return '0';
+  if (axis.id === 'weight_g' && v > 1000) {
     return parseFloat((v / 1000).toPrecision(3)).toString() + ' kg';
   }
-  if ((axis.id === 'spec_freq_low_hz' || axis.id === 'spec_freq_high_hz') && v >= 1000) {
+  if (axis.id && /^freq_(low|high)_hz(_measured|_spec)?$/.test(axis.id) && v >= 1000) {
     return parseFloat((v / 1000).toPrecision(3)).toString() + 'k';
   }
   const n = parseFloat(v.toPrecision(3));

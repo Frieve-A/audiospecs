@@ -37,12 +37,12 @@ function sig3(v: number): string {
 function formatNum(v: number, key: string): string {
   if (key === 'price_anchor_usd' || key === 'msrp_usd')
     return '$' + v.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  if (key === 'spec_freq_low_hz' || key === 'spec_freq_high_hz') {
+  if (/^freq_(low|high)_hz(_measured|_spec)?$/.test(key)) {
     if (v >= 1000) return parseFloat((v / 1000).toPrecision(3)).toString() + 'k';
     return sig3(v);
   }
   if (key === 'release_year') return String(v);
-  if (key === 'spec_weight_g') return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + 'g';
+  if (key === 'weight_g') return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + 'g';
   if (key === 'driver_total_count') return String(Math.round(v));
   return sig3(v);
 }
