@@ -1,10 +1,11 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { getCategoryLabel, getScaleForField, computeBarPercent } from '../presets';
+import { getCategoryLabel, getScaleForField, computeBarPercent, getAxis } from '../presets';
 import { t, getLocale, tAxis } from '../i18n';
 import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss, fetchAllSourceUrls } from '../sources';
 import { setupColHelpTooltips } from '../components/col-help';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
+import { attachClearable } from '../components/clearable-input';
 
 let cleanupDocListener: (() => void) | null = null;
 
@@ -214,6 +215,10 @@ export async function renderCompare(
   const resultsEl = document.getElementById('compare-results')!;
   let searchTimeout: ReturnType<typeof setTimeout>;
 
+  attachClearable(searchInput, () => {
+    resultsEl.style.display = 'none';
+  });
+
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(async () => {
@@ -349,6 +354,21 @@ export async function renderCompare(
               const desc = t(descKey);
               const hasDesc = desc !== descKey;
               const helpIcon = hasDesc ? `<span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
+              // Determine best value when comparing 2+ products for fields with a defined better direction.
+              const better = getAxis(f.key)?.better;
+              let bestValue: number | null = null;
+              if (better && ordered.length >= 2) {
+                const nums = ordered
+                  .map((r) => r[f.key])
+                  .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+                if (nums.length >= 2) {
+                  bestValue = better === 'higher' ? Math.max(...nums) : Math.min(...nums);
+                }
+              }
+              const fmtCell = (v: number): string => {
+                const s = f.format(v);
+                return bestValue != null && v === bestValue ? `<strong>${s}</strong>` : s;
+              };
               return `
               <div class="compare-label">${formatUnitCasing(t(f.labelKey))}${helpIcon}</div>
               ${ordered.map((r) => {
@@ -357,10 +377,10 @@ export async function renderCompare(
                 const badge = isRowValueMeasured(r, f.key) ? measuredBadgeSvg() : '';
                 if (typeof v === 'number' && range && range.min != null && range.max != null) {
                   const pct = computeBarPercent(v, range.min, range.max, scale);
-                  return `<div class="compare-cell numeric bar-cell" data-product-id="${pid}" data-col="${f.key}" style="--bar-pct:${pct.toFixed(1)}">${f.format(v)}${badge}</div>`;
+                  return `<div class="compare-cell numeric bar-cell" data-product-id="${pid}" data-col="${f.key}" style="--bar-pct:${pct.toFixed(1)}">${fmtCell(v)}${badge}</div>`;
                 }
                 if (typeof v === 'number') {
-                  return `<div class="compare-cell numeric" data-product-id="${pid}" data-col="${f.key}">${f.format(v)}${badge}</div>`;
+                  return `<div class="compare-cell numeric" data-product-id="${pid}" data-col="${f.key}">${fmtCell(v)}${badge}</div>`;
                 }
                 return `<div class="compare-cell">${f.format(v)}</div>`;
               }).join('')}`;

@@ -6,6 +6,7 @@ import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss } from '../so
 import { setupColHelpTooltips } from '../components/col-help';
 import { showToast } from '../toast';
 import { isMultiSourceBaseKey, isRowValueMeasured, MEASURED_FLAG_PREFIX, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
+import { attachClearable } from '../components/clearable-input';
 
 interface ExploreState {
   search: string;
@@ -531,7 +532,8 @@ export async function renderExplore(
 
   // Event listeners
   let searchTimeout: ReturnType<typeof setTimeout>;
-  document.getElementById('explore-search')!.addEventListener('input', (e) => {
+  const exploreSearchInput = document.getElementById('explore-search') as HTMLInputElement;
+  exploreSearchInput.addEventListener('input', (e) => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
       state.search = (e.target as HTMLInputElement).value;
@@ -540,6 +542,7 @@ export async function renderExplore(
       loadData();
     }, 300);
   });
+  attachClearable(exploreSearchInput);
   document.getElementById('explore-cat')!.addEventListener('change', (e) => {
     state.category = (e.target as HTMLSelectElement).value;
     state.page = 0;

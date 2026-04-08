@@ -5,6 +5,7 @@ import { t, tAxisDesc, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
 import { showToast } from '../toast';
+import { attachClearable } from '../components/clearable-input';
 
 const SOURCE_TYPE_COLORS: Record<string, string> = {
   spec: '#9333ea',
@@ -419,7 +420,8 @@ export async function renderAnalysis(
     });
 
     let keywordTimer: ReturnType<typeof setTimeout> | null = null;
-    document.getElementById('input-keyword')!.addEventListener('input', (e) => {
+    const keywordInput = document.getElementById('input-keyword') as HTMLInputElement;
+    keywordInput.addEventListener('input', (e) => {
       if (keywordTimer) clearTimeout(keywordTimer);
       keywordTimer = setTimeout(() => {
         currentKeyword = (e.target as HTMLInputElement).value.trim();
@@ -427,6 +429,7 @@ export async function renderAnalysis(
         renderPlot();
       }, 300);
     });
+    attachClearable(keywordInput);
 
     document.getElementById('chk-show-correlation')?.addEventListener('change', (e) => {
       currentShowCorrelation = (e.target as HTMLInputElement).checked;
