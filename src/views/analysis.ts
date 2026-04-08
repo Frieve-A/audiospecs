@@ -1107,7 +1107,7 @@ export async function renderAnalysis(
       const relayout: Record<string, unknown> = {};
       if (xRange) relayout['xaxis.range'] = xRange;
       if (yRange) relayout['yaxis.range'] = yRange;
-      Plotly.update(gdAny, { 'marker.size': sizes }, relayout);
+      (Plotly as any).update(gdAny, { 'marker.size': sizes }, relayout);
     };
     const getTraceIndexFromLegendItem = (item: Element): number | null => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

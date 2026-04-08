@@ -356,7 +356,7 @@ export async function renderScatterWidget(
     const relayout: Record<string, unknown> = {};
     if (xRange) relayout['xaxis.range'] = xRange;
     if (yRange) relayout['yaxis.range'] = yRange;
-    Plotly.update(gd, { 'marker.size': sizes }, relayout);
+    (Plotly as any).update(gd, { 'marker.size': sizes }, relayout);
   };
   const getTraceIndexFromLegendItem = (item: Element): number | null => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

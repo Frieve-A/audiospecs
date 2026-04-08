@@ -371,7 +371,7 @@ export async function renderCompare(
                 }
               }
               const fmtCell = (v: number): string => {
-                const s = f.format(v);
+                const s = String(f.format(v));
                 return bestValue != null && v === bestValue ? `<strong>${s}</strong>` : s;
               };
               return `
@@ -490,7 +490,7 @@ export async function renderCompare(
             const widths = gd.data.map((_: unknown, i: number) =>
               i === idx ? HOVER_WIDTH : BASE_WIDTH,
             );
-            Plotly.restyle(gd, { 'line.width': widths });
+            (Plotly as any).restyle(gd, { 'line.width': widths });
           };
           // Plotly renders each legend entry as a <g class="traces">. Wait a
           // tick to make sure they exist after Plotly.react resolves.
