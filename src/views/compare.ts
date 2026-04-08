@@ -12,6 +12,8 @@ let cleanupDocListener: (() => void) | null = null;
 const STORAGE_KEY = 'compare_ids';
 const SPLIT_STORAGE_KEY = 'compare_split_measured';
 
+export const MAX_COMPARE_PRODUCTS = 20;
+
 function loadIds(): string[] {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -132,7 +134,8 @@ export async function renderCompare(
   const storedIds = loadIds();
 
   // If URL has IDs, use those (and save them). Otherwise restore from storage.
-  const ids = urlIds.length > 0 ? urlIds : storedIds;
+  // Cap at MAX_COMPARE_PRODUCTS to guard against pathological URLs.
+  const ids = (urlIds.length > 0 ? urlIds : storedIds).slice(0, MAX_COMPARE_PRODUCTS);
   saveIds(ids);
 
   let split = loadSplit();
@@ -153,13 +156,15 @@ export async function renderCompare(
         <input type="search" id="compare-search" placeholder="${t('compare.placeholder.search')}" style="width:100%"/>
         <div class="search-results" id="compare-results" style="display:none"></div>
       </div>
-      <div class="control-group" style="display:flex;flex-direction:row;align-items:center;margin-left:auto;gap:0.75rem">
-        <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.85rem;cursor:pointer">
+      <div class="control-group" style="display:flex;flex-direction:row;align-items:center;margin-left:auto;gap:0.75rem;flex-wrap:wrap;justify-content:flex-end">
+        <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.85rem;cursor:pointer;flex-shrink:0">
           <input type="checkbox" id="compare-split-measured" ${split ? 'checked' : ''}/>
           ${t('compare.split_spec_measured')}
         </label>
-        <button id="compare-download" title="${t('common.download.tooltip')}">${t('common.download')}</button>
-        <button id="compare-clear-all" class="danger">${t('common.clear_all')}</button>
+        <div style="display:flex;flex-direction:row;align-items:center;gap:0.75rem;flex-shrink:0">
+          <button id="compare-download" title="${t('common.download.tooltip')}">${t('common.download')}</button>
+          <button id="compare-clear-all" class="danger">${t('common.clear_all')}</button>
+        </div>
       </div>
     </div>
     <div id="compare-content"></div>
@@ -252,7 +257,7 @@ export async function renderCompare(
       resultsEl.querySelectorAll('[data-id]').forEach((el) => {
         el.addEventListener('click', () => {
           const id = (el as HTMLElement).dataset.id!;
-          if (!ids.includes(id) && ids.length < 5) {
+          if (!ids.includes(id) && ids.length < MAX_COMPARE_PRODUCTS) {
             ids.push(id);
             saveIds(ids);
             window.location.hash = `#/compare?ids=${ids.join(',')}`;
@@ -411,6 +416,9 @@ export async function renderCompare(
       );
 
       const TRACE_COLORS = ['#7c3aed', '#db2777', '#2563eb', '#059669', '#d97706'];
+      // Cycle through dash patterns after colors wrap, so the 6th+ trace
+      // is visually distinguishable from the 1st–5th.
+      const TRACE_DASHES = ['solid', 'dot', 'dash', 'dashdot', 'longdash'] as const;
       const traces: Data[] = [];
 
       for (let i = 0; i < ordered.length; i++) {
@@ -419,13 +427,14 @@ export async function renderCompare(
           ?? frRows.find((r) => r.product_id === pid);
         if (!fr) continue;
         const points: [number, number][] = JSON.parse(fr.points_json);
+        const dash = TRACE_DASHES[Math.floor(i / TRACE_COLORS.length) % TRACE_DASHES.length];
         traces.push({
           x: points.map((p) => p[0]),
           y: points.map((p) => p[1]),
           type: 'scatter',
           mode: 'lines',
           name: `${ordered[i].brand_label} ${ordered[i].product_name}`,
-          line: { color: TRACE_COLORS[i % TRACE_COLORS.length], width: 1.5 },
+          line: { color: TRACE_COLORS[i % TRACE_COLORS.length], width: 1.5, dash },
           hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
         });
       }
@@ -468,6 +477,31 @@ export async function renderCompare(
         };
 
         await Plotly.react('compare-fr-plot', traces, layout, plotConfig);
+
+        // Emphasize the hovered legend item by thickening its trace line.
+        // plotly_legendhover doesn't reliably fire here, so attach DOM
+        // listeners directly to the legend item elements rendered by Plotly.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const gd = document.getElementById('compare-fr-plot') as any;
+        if (gd) {
+          const BASE_WIDTH = 1.5;
+          const HOVER_WIDTH = 4;
+          const setHover = (idx: number | null) => {
+            const widths = gd.data.map((_: unknown, i: number) =>
+              i === idx ? HOVER_WIDTH : BASE_WIDTH,
+            );
+            Plotly.restyle(gd, { 'line.width': widths });
+          };
+          // Plotly renders each legend entry as a <g class="traces">. Wait a
+          // tick to make sure they exist after Plotly.react resolves.
+          requestAnimationFrame(() => {
+            const items = gd.querySelectorAll('g.legend g.traces');
+            items.forEach((item: Element, idx: number) => {
+              item.addEventListener('mouseenter', () => setHover(idx));
+              item.addEventListener('mouseleave', () => setHover(null));
+            });
+          });
+        }
       }
     }
 

@@ -4,6 +4,8 @@ import { getAxis, getAxisLabel, getCategoryLabel, buildBetterAnnotations, comput
 import { t, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
+import { showToast } from '../toast';
+import { MAX_COMPARE_PRODUCTS } from '../views/compare';
 
 const CATEGORY_COLORS: Record<string, string> = {
   headphone: '#7c3aed',
@@ -338,6 +340,43 @@ export async function renderScatterWidget(
     cur.forEach((v, i) => { if (v) visible.add(i); });
     setTimeout(() => recalcRWith(visible), 0);
   });
+  // Emphasize hovered legend item by enlarging its markers.
+  // plotly_legendhover doesn't reliably fire, so bind DOM listeners directly.
+  const BASE_MARKER_SIZE = 7;
+  const HOVER_MARKER_SIZE = 10;
+  const setLegendHover = (idx: number | null): void => {
+    if (!gd.data) return;
+    const sizes = gd.data.map((_: unknown, i: number) =>
+      i === idx ? HOVER_MARKER_SIZE : BASE_MARKER_SIZE,
+    );
+    // Pin axis ranges so Plotly doesn't re-fit the plot for the larger markers.
+    const fl = gd._fullLayout;
+    const xRange = fl?.xaxis?.range ? (fl.xaxis.range as number[]).slice() : null;
+    const yRange = fl?.yaxis?.range ? (fl.yaxis.range as number[]).slice() : null;
+    const relayout: Record<string, unknown> = {};
+    if (xRange) relayout['xaxis.range'] = xRange;
+    if (yRange) relayout['yaxis.range'] = yRange;
+    Plotly.update(gd, { 'marker.size': sizes }, relayout);
+  };
+  const getTraceIndexFromLegendItem = (item: Element): number | null => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = (item as any).__data__;
+    const node = Array.isArray(d) ? d[0] : d;
+    const trace = node && (node.trace ?? node);
+    const idx = trace && (trace.index ?? trace._expandedIndex);
+    return typeof idx === 'number' ? idx : null;
+  };
+  requestAnimationFrame(() => {
+    const items = gd.querySelectorAll('g.legend g.traces');
+    items.forEach((item: Element) => {
+      item.addEventListener('mouseenter', () => {
+        const idx = getTraceIndexFromLegendItem(item);
+        if (idx != null) setLegendHover(idx);
+      });
+      item.addEventListener('mouseleave', () => setLegendHover(null));
+    });
+  });
+
   gd.on('plotly_legenddoubleclick', (evt: { curveNumber: number }) => {
     const cur = getVisibility();
     const allVisible = cur.every(Boolean);
@@ -387,11 +426,17 @@ export async function renderScatterWidget(
       document.querySelector('.scatter-ctx-menu')?.remove();
       let ids: string[] = [];
       try { ids = JSON.parse(sessionStorage.getItem('compare_ids') || '[]'); } catch { /* empty */ }
-      if (!ids.includes(row.product_id) && ids.length < 5) {
-        ids.push(row.product_id);
-        sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+      if (ids.includes(row.product_id)) {
         navigate('compare', { ids: ids.join(',') });
+        return;
       }
+      if (ids.length >= MAX_COMPARE_PRODUCTS) {
+        showToast(t('common.compare_full'));
+        return;
+      }
+      ids.push(row.product_id);
+      sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+      navigate('compare', { ids: ids.join(',') });
     });
 
     menu.querySelector('[data-action="google"]')!.addEventListener('click', () => {

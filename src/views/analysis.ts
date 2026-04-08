@@ -6,6 +6,7 @@ import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
 import { showToast } from '../toast';
 import { attachClearable } from '../components/clearable-input';
+import { MAX_COMPARE_PRODUCTS } from './compare';
 
 const SOURCE_TYPE_COLORS: Record<string, string> = {
   spec: '#9333ea',
@@ -1088,6 +1089,45 @@ export async function renderAnalysis(
       cur.forEach((v, i) => { if (v) visible.add(i); });
       setTimeout(() => recalcRWith(visible), 0);
     });
+    // Emphasize hovered legend item by enlarging its markers.
+    // plotly_legendhover doesn't reliably fire, so bind DOM listeners directly.
+    const BASE_MARKER_SIZE = 7;
+    const HOVER_MARKER_SIZE = 10;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gdAny = gd as any;
+    const setLegendHover = (idx: number | null): void => {
+      if (!gdAny.data) return;
+      const sizes = gdAny.data.map((_: unknown, i: number) =>
+        i === idx ? HOVER_MARKER_SIZE : BASE_MARKER_SIZE,
+      );
+      // Pin axis ranges so Plotly doesn't re-fit the plot for the larger markers.
+      const fl = gdAny._fullLayout;
+      const xRange = fl?.xaxis?.range ? (fl.xaxis.range as number[]).slice() : null;
+      const yRange = fl?.yaxis?.range ? (fl.yaxis.range as number[]).slice() : null;
+      const relayout: Record<string, unknown> = {};
+      if (xRange) relayout['xaxis.range'] = xRange;
+      if (yRange) relayout['yaxis.range'] = yRange;
+      Plotly.update(gdAny, { 'marker.size': sizes }, relayout);
+    };
+    const getTraceIndexFromLegendItem = (item: Element): number | null => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = (item as any).__data__;
+      const node = Array.isArray(d) ? d[0] : d;
+      const trace = node && (node.trace ?? node);
+      const idx = trace && (trace.index ?? trace._expandedIndex);
+      return typeof idx === 'number' ? idx : null;
+    };
+    requestAnimationFrame(() => {
+      const items = gdAny.querySelectorAll('g.legend g.traces');
+      items.forEach((item: Element) => {
+        item.addEventListener('mouseenter', () => {
+          const idx = getTraceIndexFromLegendItem(item);
+          if (idx != null) setLegendHover(idx);
+        });
+        item.addEventListener('mouseleave', () => setLegendHover(null));
+      });
+    });
+
     gd.on('plotly_legenddoubleclick', (evt: { curveNumber: number }) => {
       const cur = getVisibility();
       const allVisible = cur.every(Boolean);
@@ -1146,7 +1186,7 @@ export async function renderAnalysis(
         else navigate('compare', { ids: ids.join(',') });
         return;
       }
-      if (ids.length >= 5) {
+      if (ids.length >= MAX_COMPARE_PRODUCTS) {
         showToast(t('common.compare_full'));
         return;
       }

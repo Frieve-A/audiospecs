@@ -5,6 +5,7 @@ import { t, tAxis, getLocale } from '../i18n';
 import { showSourceMenu, setupSourceMenuDismiss } from '../sources';
 import { showToast } from '../toast';
 import { isMultiSourceBaseKey, isRowValueMeasured, MEASURED_FLAG_PREFIX, measuredBadgeSvg, setupMeasuredBadgeTooltips } from './measured-indicator';
+import { MAX_COMPARE_PRODUCTS } from '../views/compare';
 
 export interface TableWidgetConfig {
   id: string;
@@ -190,7 +191,7 @@ export async function renderTableWidget(
         else navigate('compare', { ids: ids.join(',') });
         return;
       }
-      if (ids.length >= 5) {
+      if (ids.length >= MAX_COMPARE_PRODUCTS) {
         showToast(t('common.compare_full'));
         return;
       }

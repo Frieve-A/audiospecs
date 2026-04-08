@@ -7,6 +7,7 @@ import { setupColHelpTooltips } from '../components/col-help';
 import { showToast } from '../toast';
 import { isMultiSourceBaseKey, isRowValueMeasured, MEASURED_FLAG_PREFIX, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { attachClearable } from '../components/clearable-input';
+import { MAX_COMPARE_PRODUCTS } from './compare';
 
 interface ExploreState {
   search: string;
@@ -449,7 +450,7 @@ export async function renderExplore(
           else navigate('compare', { ids: ids.join(',') });
           return;
         }
-        if (ids.length >= 5) {
+        if (ids.length >= MAX_COMPARE_PRODUCTS) {
           showToast(t('common.compare_full'));
           return;
         }
