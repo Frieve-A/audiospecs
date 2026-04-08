@@ -3,6 +3,8 @@ import { getScaleForField, computeBarPercent, getCategoryLabel } from '../preset
 import { navigate } from '../router';
 import { t, tAxis, getLocale } from '../i18n';
 import { showSourceMenu, setupSourceMenuDismiss } from '../sources';
+import { showToast } from '../toast';
+import { isMultiSourceBaseKey, isRowValueMeasured, MEASURED_FLAG_PREFIX, measuredBadgeSvg, setupMeasuredBadgeTooltips } from './measured-indicator';
 
 export interface TableWidgetConfig {
   id: string;
@@ -94,6 +96,13 @@ export async function renderTableWidget(
     return expr === `p.${k}` ? `p.${k}` : `${expr} as ${k}`;
   });
 
+  // For each multi-source base column, also fetch its `_measured` sibling so
+  // we can decide whether to show the "measured" gauge badge next to the value.
+  const measuredFlagParts = numericKeys
+    .filter((k) => isMultiSourceBaseKey(k))
+    .map((k) => `p.${k}_measured AS ${MEASURED_FLAG_PREFIX}${k}`);
+  const allSelectParts = [...numericSelectParts, ...measuredFlagParts];
+
   const sortExpr = colSqlExpr(config.sort);
   const dataSql = `
     SELECT
@@ -101,7 +110,7 @@ export async function renderTableWidget(
       CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
       p.product_name,
       p.category_primary,
-      ${numericSelectParts.join(', ')}
+      ${allSelectParts.join(', ')}
     FROM web_product_core p
     WHERE p.category_primary IN (${catPlaceholders})
       AND ${sortExpr} IS NOT NULL
@@ -136,7 +145,8 @@ export async function renderTableWidget(
             const pct = (range && range.min != null && range.max != null)
               ? computeBarPercent(v as number, range.min, range.max, range.scale)
               : 0;
-            return `<td class="numeric bar-cell" data-product-id="${r.product_id}" data-col="${col.key}" style="--bar-pct:${pct.toFixed(1)}">${formatNum(v as number, col.key)}</td>`;
+            const badge = isRowValueMeasured(r, col.key) ? measuredBadgeSvg() : '';
+            return `<td class="numeric bar-cell" data-product-id="${r.product_id}" data-col="${col.key}" style="--bar-pct:${pct.toFixed(1)}">${formatNum(v as number, col.key)}${badge}</td>`;
           }
           return '<td class="numeric">\u2014</td>';
         }
@@ -148,6 +158,7 @@ export async function renderTableWidget(
       <td><button class="compare-add" data-id="${r.product_id}" title="${t('explore.add_to_compare')}">+</button></td>
       <td class="search-icons">
         <button class="search-google" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Google">${GOOGLE_SVG}</button>
+        <button class="search-frieve" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Frieve - Audio Review">🎧</button>
         <button class="search-amazon" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Amazon [PR]">${AMAZON_SVG}</button>
       </td>
     </tr>
@@ -168,13 +179,26 @@ export async function renderTableWidget(
 
   // Compare buttons
   tableEl.querySelectorAll<HTMLElement>('.compare-add').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (ev) => {
       const id = btn.dataset.id!;
+      const e = ev as MouseEvent;
+      const keepOnPage = e.ctrlKey || e.metaKey;
       let ids: string[] = [];
       try { ids = JSON.parse(sessionStorage.getItem('compare_ids') || '[]'); } catch { /* empty */ }
-      if (!ids.includes(id) && ids.length < 5) {
-        ids.push(id);
-        sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+      if (ids.includes(id)) {
+        if (keepOnPage) showToast(t('common.added_to_compare'));
+        else navigate('compare', { ids: ids.join(',') });
+        return;
+      }
+      if (ids.length >= 5) {
+        showToast(t('common.compare_full'));
+        return;
+      }
+      ids.push(id);
+      sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+      if (keepOnPage) {
+        showToast(t('common.added_to_compare'));
+      } else {
         navigate('compare', { ids: ids.join(',') });
       }
     });
@@ -185,6 +209,13 @@ export async function renderTableWidget(
     btn.addEventListener('click', () => {
       const q = `${btn.dataset.brand} ${btn.dataset.name}`.trim();
       window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, '_blank');
+    });
+  });
+  tableEl.querySelectorAll<HTMLElement>('.search-frieve').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const q = `${btn.dataset.brand} ${btn.dataset.name}`.trim().split(/\s+/).map(encodeURIComponent).join('+');
+      const lang = getLocale() === 'ja' ? 'ja' : 'en';
+      window.open(`https://audioreview.frieve.com/search/${lang}/?q=${q}`, '_blank');
     });
   });
   tableEl.querySelectorAll<HTMLElement>('.search-amazon').forEach((btn) => {
@@ -214,6 +245,9 @@ export async function renderTableWidget(
     td.addEventListener('touchend', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
     td.addEventListener('touchmove', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
   });
+
+  // Tap/hover tooltip for the measured-value gauge badge
+  setupMeasuredBadgeTooltips(tableEl, tableEl.closest('.widget-table-wrap') as HTMLElement | null);
 
   if (!sourceMenuSetup) {
     sourceMenuSetup = true;

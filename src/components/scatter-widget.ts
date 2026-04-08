@@ -1,6 +1,6 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { getAxis, getAxisLabel, getCategoryLabel, buildBetterAnnotations, computeParetoFrontier, clampForScatter, type AxisDef } from '../presets';
+import { getAxis, getAxisLabel, getCategoryLabel, buildBetterAnnotations, computeParetoFrontier, clampForScatter, getAxisSourceKind, type AxisDef } from '../presets';
 import { t, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
@@ -45,7 +45,29 @@ type RowType = {
   y_val_raw: number;
   brand_name_en: string;
   price_anchor_usd: number | null;
+  x_src: string;
+  y_src: string;
 };
+
+/**
+ * Build a SQL expression that yields the data-source label ('measured' | 'spec'
+ * | 'meta' | 'unknown') for a given axis id. Used so the widget hover tooltip
+ * can annotate values with their origin, matching the Analysis Scatter view.
+ */
+function srcExprFor(axisId: string): string {
+  if (axisId.endsWith('_measured')) return "'measured'";
+  if (axisId.endsWith('_spec')) return "'spec'";
+  const kind = getAxisSourceKind(axisId);
+  if (kind === 'measured') return "'measured'";
+  if (kind === 'spec') return "'spec'";
+  if (kind === 'multi') {
+    return `CASE
+      WHEN p.${axisId}_measured IS NOT NULL THEN 'measured'
+      WHEN p.${axisId}_spec IS NOT NULL THEN 'spec'
+      ELSE 'unknown' END`;
+  }
+  return "'meta'";
+}
 
 export interface ScatterWidgetConfig {
   id: string;
@@ -102,6 +124,8 @@ export async function renderScatterWidget(
       p.category_primary,
       ${xSource} as x_val,
       ${ySource} as y_val,
+      ${srcExprFor(config.x)} as x_src,
+      ${srcExprFor(config.y)} as y_src,
       p.brand_name_en,
       coalesce(p.street_price_usd, p.msrp_usd) as price_anchor_usd
     FROM web_product_core p
@@ -346,6 +370,7 @@ export async function renderScatterWidget(
     menu.innerHTML = `
       <button data-action="compare">${t('analysis.ctx.add_compare')}</button>
       <button data-action="google">${t('analysis.ctx.search_google')}</button>
+      <button data-action="frieve">${t('analysis.ctx.search_frieve')}</button>
       <button data-action="amazon">${t('analysis.ctx.search_amazon')}</button>
     `;
     menu.style.left = `${cx}px`;
@@ -372,6 +397,13 @@ export async function renderScatterWidget(
     menu.querySelector('[data-action="google"]')!.addEventListener('click', () => {
       document.querySelector('.scatter-ctx-menu')?.remove();
       window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank');
+    });
+
+    menu.querySelector('[data-action="frieve"]')!.addEventListener('click', () => {
+      document.querySelector('.scatter-ctx-menu')?.remove();
+      const q = searchQuery.split(/\s+/).map(encodeURIComponent).join('+');
+      const lang = getLocale() === 'ja' ? 'ja' : 'en';
+      window.open(`https://audioreview.frieve.com/search/${lang}/?q=${q}`, '_blank');
     });
 
     menu.querySelector('[data-action="amazon"]')!.addEventListener('click', () => {
@@ -478,7 +510,11 @@ function makeTrace(
     text: data.map((d) => {
       const isPriceAxis = xAxis.id === 'price_anchor_usd' || xAxis.id === 'msrp_usd'
         || yAxis.id === 'price_anchor_usd' || yAxis.id === 'msrp_usd';
-      let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val_raw, xAxis)}<br>${yLabel}: ${fmtAxis(d.y_val_raw, yAxis)}`;
+      const srcAnnot = (src: string | undefined): string => {
+        if (src !== 'spec' && src !== 'measured') return '';
+        return ` (${t('analysis.source_type.' + src)})`;
+      };
+      let tip = `${d.brand_label} ${d.product_name}<br>${xLabel}: ${fmtAxis(d.x_val_raw, xAxis)}${srcAnnot(d.x_src)}<br>${yLabel}: ${fmtAxis(d.y_val_raw, yAxis)}${srcAnnot(d.y_src)}`;
       if (!isPriceAxis) {
         tip += `<br>${t('common.price')}: ${d.price_anchor_usd ? '$' + d.price_anchor_usd.toLocaleString() : t('common.na')}`;
       }

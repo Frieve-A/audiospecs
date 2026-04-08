@@ -30,6 +30,8 @@ export const AXES: AxisDef[] = [
   { id: 'release_year', source: 'release_year', label: 'Release Year', scale: 'year', better: 'higher' },
   // Perf
   { id: 'sinad_db', source: 'sinad_db', label: 'SINAD (dB)', scale: 'linear', better: 'higher' },
+  { id: 'sinad_db_measured', source: 'sinad_db_measured', label: 'SINAD measured (dB)', scale: 'linear', better: 'higher' },
+  { id: 'sinad_db_spec', source: 'sinad_db_spec', label: 'SINAD spec (dB)', scale: 'linear', better: 'higher' },
   { id: 'snr_db', source: 'snr_db', label: 'SNR (dB)', scale: 'linear', better: 'higher' },
   { id: 'snr_db_measured', source: 'snr_db_measured', label: 'SNR measured (dB)', scale: 'linear', better: 'higher' },
   { id: 'snr_db_spec', source: 'snr_db_spec', label: 'SNR spec (dB)', scale: 'linear', better: 'higher' },
@@ -164,7 +166,6 @@ export type AxisSourceKind = 'meta' | 'multi' | 'measured' | 'spec';
  * intrinsically originates from third-party measurement).
  */
 const FIXED_MEASURED_AXES = new Set<string>([
-  'sinad_db',
   'sensitivity_proxy_db',
   'driveability_index',
   'fr_harman_std_db',

@@ -788,6 +788,17 @@ table.data-table .numeric {
   pointer-events: none;
 }
 
+/* Gauge badge marking a value as third-party measured (vs manufacturer spec). */
+.measured-badge {
+  display: inline-block;
+  vertical-align: -0.1em;
+  margin-left: 0.25rem;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  position: relative;
+  z-index: 1;
+}
+
 /* ── Pagination ── */
 .pagination {
   display: flex;
@@ -1081,9 +1092,20 @@ table.data-table .numeric {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  /* Mobile: no left-sticky anywhere. The header row remains pinned to the
+     top (via the base `#explore-table thead th` sticky rule), and body cells
+     scroll normally. Both header and body fixed-col cells must stay aligned,
+     so we clear the JS-assigned inline `left` (with !important) and disable
+     horizontal sticky on both. */
   #explore-table th.fixed-col,
   #explore-table td.fixed-col {
+    left: auto !important;
+  }
+
+  #explore-table td.fixed-col {
     position: static;
+    background: transparent;
+    z-index: auto;
   }
 
 }
@@ -1160,10 +1182,10 @@ table.data-table .numeric {
   width: 1px;
 }
 
-/* Search column: fit exactly two buttons + gap */
+/* Search column: fit exactly three buttons + gaps */
 #explore-table td.col-action.search-icons,
 #explore-table th.col-action:last-of-type {
-  width: calc(2rem * 2 + 0.29rem + 0.35rem * 2);
+  width: calc(2rem * 3 + 0.29rem * 2 + 0.35rem * 2);
 }
 
 /* ── Search icon buttons (explore table) ── */

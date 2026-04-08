@@ -487,7 +487,20 @@ export async function renderAnalysis(
         currentColor = preset.color;
         if (!preset.categories.includes('all')) {
           selectedCats = [...preset.categories];
+        } else {
+          selectedCats = [];
         }
+        // Reset advanced settings so the preset shows as intended, rather
+        // than inheriting stale overrides from a previous preset/session.
+        currentSymbol = 'none';
+        currentXDataSource = 'best';
+        currentYDataSource = 'best';
+        currentKeyword = '';
+        currentLabels = false;
+        currentLabelsPareto = false;
+        currentShowCorrelation = true;
+        currentShowPareto = true;
+        currentShowBetter = true;
         syncUrl();
         await renderControls();
         renderPresets();
@@ -1102,6 +1115,7 @@ export async function renderAnalysis(
     menu.innerHTML = `
       <button data-action="compare">${t('analysis.ctx.add_compare')}</button>
       <button data-action="google">${t('analysis.ctx.search_google')}</button>
+      <button data-action="frieve">${t('analysis.ctx.search_frieve')}</button>
       <button data-action="amazon">${t('analysis.ctx.search_amazon')}</button>
     `;
     // Position: keep within viewport
@@ -1145,6 +1159,13 @@ export async function renderAnalysis(
     menu.querySelector('[data-action="google"]')!.addEventListener('click', () => {
       dismissCtxMenu();
       window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank');
+    });
+
+    menu.querySelector('[data-action="frieve"]')!.addEventListener('click', () => {
+      dismissCtxMenu();
+      const q = searchQuery.split(/\s+/).map(encodeURIComponent).join('+');
+      const lang = getLocale() === 'ja' ? 'ja' : 'en';
+      window.open(`https://audioreview.frieve.com/search/${lang}/?q=${q}`, '_blank');
     });
 
     menu.querySelector('[data-action="amazon"]')!.addEventListener('click', () => {

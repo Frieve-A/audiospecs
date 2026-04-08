@@ -7,7 +7,11 @@ export function columnToPatterns(colId: string): string[] {
     'price_anchor_usd': ['meta.street_price_usd', 'meta.msrp_usd'],
     'msrp_usd': ['meta.msrp_usd'],
     'release_year': ['meta.release_year', 'meta.release_date'],
-    'sinad_db': ['%sinad%'],
+    // sinad_db_spec は audiodb build 側で公称 THD+N(%) からの換算値も
+    // 含むため、spec 側パターンには thd_n 系も含める。
+    'sinad_db': ['%sinad%', '%thd_n_percent%'],
+    'sinad_db_measured': ['%sinad%'],
+    'sinad_db_spec': ['%sinad%', '%thd_n_percent%'],
     'snr_db': ['%snr_dB%', '%snr_db%'],
     'snr_db_measured': ['%snr_dB%', '%snr_db%'],
     'snr_db_spec': ['%snr_dB%', '%snr_db%'],
