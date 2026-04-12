@@ -262,6 +262,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'compare.fr.yaxis': 'Deviation (dB)',
     'compare.fr.xaxis': 'Frequency (Hz)',
 
+    // Embed widget
+    'embed.error.not_found': 'Product not found',
+    'embed.error.search_link': 'Search on Frieve - AudioSpecs',
+    'embed.open_in_audiospecs': 'Open in Frieve - AudioSpecs',
+    'embed.hint.mouse': 'Right-click a value to view sources',
+    'embed.hint.touch': 'Long-press a value to view sources',
+    'embed.hint.hybrid': 'Right-click or long-press a value to view sources',
+
     // About
     'about.title': 'About',
     'about.subtitle': 'Audio equipment database & visualization tool',
@@ -718,6 +726,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'compare.fr.title': '周波数特性',
     'compare.fr.yaxis': '偏差 (dB)',
     'compare.fr.xaxis': '周波数 (Hz)',
+
+    // Embed widget
+    'embed.error.not_found': '製品が見つかりません',
+    'embed.error.search_link': 'Frieve - AudioSpecs で検索',
+    'embed.open_in_audiospecs': 'Frieve - AudioSpecs で開く',
+    'embed.hint.mouse': '値を右クリックでソースを表示',
+    'embed.hint.touch': '値をロングタップでソースを表示',
+    'embed.hint.hybrid': '値を右クリックまたはロングタップでソースを表示',
 
     // About
     'about.title': '当サイトについて',

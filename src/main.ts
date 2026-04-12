@@ -12,6 +12,7 @@ import { renderExplore } from './views/explore';
 import { renderCompare } from './views/compare';
 import { renderAbout } from './views/about';
 import { initI18n, t, getLocale, setLocale, onLocaleChange, AVAILABLE_LOCALES } from './i18n';
+import { applyTheme, getThemeMode, initTheme, cycleTheme, onThemeChange } from './theme';
 
 const NAV_ROUTES: Route[] = ['home', 'analysis', 'explore', 'compare', 'about'];
 const NAV_LABEL_KEYS: Record<Route, string> = {
@@ -42,6 +43,7 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
       <select id="locale-select" class="locale-select">
         ${AVAILABLE_LOCALES.map((l) => `<option value="${l.code}" ${l.code === getLocale() ? 'selected' : ''}>${l.label}</option>`).join('')}
       </select>
+      <button class="theme-toggle" title="Theme"></button>
       </div>
       <div class="nav-toolbar">
       <button class="share-btn" title="${t('common.share')}">
@@ -54,6 +56,7 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
       <select class="locale-select">
         ${AVAILABLE_LOCALES.map((l) => `<option value="${l.code}" ${l.code === getLocale() ? 'selected' : ''}>${l.label}</option>`).join('')}
       </select>
+      <button class="theme-toggle" title="Theme"></button>
       </div>
       <button id="nav-hamburger" class="nav-hamburger" aria-label="Menu" aria-expanded="false">
         <span></span><span></span><span></span>
@@ -108,6 +111,12 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
     });
   });
 
+  // Theme toggle
+  initTheme();
+  document.querySelectorAll('.theme-toggle').forEach((el) => {
+    el.addEventListener('click', () => cycleTheme());
+  });
+
   return {
     nav: app.querySelector('nav')!,
     content: document.getElementById('main-content')!,
@@ -130,6 +139,8 @@ function updateNav(nav: HTMLElement, route: Route): void {
 }
 
 async function main(): Promise<void> {
+  // Apply theme early to avoid flash of wrong theme
+  applyTheme(getThemeMode());
   initI18n();
   document.title = t('page.title');
 
@@ -192,6 +203,12 @@ async function main(): Promise<void> {
     const prevRoute = lastRouteInfo?.route;
     shell = createShell();
     if (prevRoute) updateNav(shell.nav, prevRoute);
+    currentRoute = null; // force re-render
+    renderCurrentRoute();
+  });
+
+  // Re-render current view on theme change (shell CSS updates automatically)
+  onThemeChange(() => {
     currentRoute = null; // force re-render
     renderCurrentRoute();
   });

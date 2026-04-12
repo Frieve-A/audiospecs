@@ -7,6 +7,7 @@ import { fetchSourceUrls } from '../sources';
 import { showToast } from '../toast';
 import { attachClearable } from '../components/clearable-input';
 import { MAX_COMPARE_PRODUCTS } from './compare';
+import { chartColors } from '../theme';
 
 const SOURCE_TYPE_COLORS: Record<string, string> = {
   spec: '#9333ea',
@@ -970,10 +971,11 @@ export async function renderAnalysis(
     let wasNarrow = window.innerWidth <= 540;
     const nl = narrowLayout(wasNarrow);
 
+    const cc = chartColors();
     const axisTitleFont = {
       family: 'Inter, sans-serif',
       size: 13 * fontScale,
-      color: '#374151',
+      color: cc.axisTitleColor,
       weight: 600,
     };
 
@@ -981,18 +983,18 @@ export async function renderAnalysis(
       xaxis: {
         title: { text: xLabel, font: axisTitleFont, standoff: nl.xStandoff },
         type: xAxis.scale === 'log' ? 'log' : 'linear',
-        gridcolor: '#eee',
-        zerolinecolor: '#ddd',
+        gridcolor: cc.gridcolor,
+        zerolinecolor: cc.zerolinecolor,
       },
       yaxis: {
         title: { text: yLabel, font: axisTitleFont, standoff: nl.yStandoff },
         type: yAxis.scale === 'log' ? 'log' : 'linear',
-        gridcolor: '#eee',
-        zerolinecolor: '#ddd',
+        gridcolor: cc.gridcolor,
+        zerolinecolor: cc.zerolinecolor,
       },
-      paper_bgcolor: '#fff',
-      plot_bgcolor: '#fff',
-      font: { family: 'Inter, sans-serif', size: 12 * fontScale },
+      paper_bgcolor: cc.paper_bgcolor,
+      plot_bgcolor: cc.plot_bgcolor,
+      font: { family: 'Inter, sans-serif', size: 12 * fontScale, ...(cc.fontColor ? { color: cc.fontColor } : {}) },
       margin: nl.margin,
       legend: {
         orientation: 'h',
@@ -1023,8 +1025,8 @@ export async function renderAnalysis(
       xanchor: 'right' as const,
       yanchor: 'top' as const,
       showarrow: false,
-      font: { size: 13 * fontScale, color: '#555', family: 'Inter, sans-serif' },
-      bgcolor: 'rgba(255,255,255,0.8)',
+      font: { size: 13 * fontScale, color: cc.annotationColor, family: 'Inter, sans-serif' },
+      bgcolor: cc.annotationBg,
       borderpad: 4,
       text: '',
     };

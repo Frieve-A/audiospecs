@@ -1,4 +1,5 @@
 import { t, tAxis, tCat, tPreset } from './i18n';
+import { chartColors } from './theme';
 
 export interface AxisDef {
   id: string;
@@ -392,7 +393,7 @@ export function buildBetterAnnotations(
   fontScale: number,
 ): Array<Record<string, unknown>> {
   const label = t('common.better');
-  const font = { size: 11 * fontScale, color: '#9ca3af', family: 'Inter, sans-serif' };
+  const font = { size: 11 * fontScale, color: chartColors().betterLabelColor, family: 'Inter, sans-serif' };
   const annotations: Array<Record<string, unknown>> = [];
 
   if (xAxis.better) {
