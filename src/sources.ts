@@ -37,6 +37,7 @@ export function columnToPatterns(colId: string): string[] {
     'weight_g': ['spec.physical.weight_g', 'measure.weight_g', 'perf.weight_g'],
     'driver_total_count': ['internal.driver.%_count'],
     'driveability_index': ['spec.audio.impedance_ohm', '%sensitivity_dB_per_mW%', '%sensitivity_dB_per_V%'],
+    'fr_data': ['measure.fr.response', 'measure.fr.%'],
     'freq_low_hz': ['%freq_low_hz%'],
     'freq_low_hz_measured': ['%freq_low_hz%'],
     'freq_low_hz_spec': ['spec.audio.freq_low_hz'],

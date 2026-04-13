@@ -1472,6 +1472,17 @@ table.data-table .numeric {
   text-decoration: underline;
 }
 
+.fr-sources-row {
+  line-height: 1.6;
+}
+.fr-sources-row a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.fr-sources-row a:hover {
+  text-decoration: underline;
+}
+
 /* Indicate spec cells are interactive */
 td[data-product-id][data-col],
 .compare-cell[data-product-id][data-col] {

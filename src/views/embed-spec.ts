@@ -5,12 +5,34 @@
  * but renders a single-product vertical spec table for iframe embedding.
  */
 
+import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { getCategoryLabel } from '../presets';
+import { getCategoryLabel, getAxis, getScaleForField, computeBarPercent } from '../presets';
 import { t } from '../i18n';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { setupColHelpTooltips } from '../components/col-help';
-import { showSourceMenu, setupSourceMenuDismiss } from '../sources';
+import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls } from '../sources';
+
+/* ── Theme helper for chart colors ── */
+
+function isEmbedDark(): boolean {
+  const theme = document.documentElement.getAttribute('data-theme');
+  if (theme === 'dark') return true;
+  if (theme === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function embedChartColors() {
+  const dark = isEmbedDark();
+  return {
+    paper_bgcolor: dark ? '#1a1a1a' : '#fff',
+    plot_bgcolor: dark ? '#1a1a1a' : '#fff',
+    gridcolor: dark ? '#333' : '#eee',
+    zerolinecolor: dark ? '#444' : '#ddd',
+    axisTitleColor: dark ? '#ccc' : '#374151',
+    fontColor: dark ? '#ccc' : undefined,
+  };
+}
 
 /* ── Formatters (shared with compare.ts logic) ── */
 
@@ -18,7 +40,7 @@ function sig3(v: number): string {
   const n = parseFloat(v.toPrecision(3));
   if (n !== 0 && Math.abs(n) < 0.001) {
     const digits = -Math.floor(Math.log10(Math.abs(n))) + 2;
-    return n.toFixed(digits);
+    return n.toFixed(digits).replace(/\.?0+$/, '');
   }
   return n.toString();
 }
@@ -221,19 +243,65 @@ export async function renderEmbedSpec(
   const allFields = filterFieldsForSplitMode(getSpecFields(), false);
   const visibleFields = allFields.filter((f) => row[f.key] != null);
 
+  // Fetch global min/max for bar rendering (same approach as compare.ts)
+  const numericKeys = visibleFields
+    .filter((f) => typeof row[f.key] === 'number')
+    .map((f) => f.key);
+  const globalRange: Record<string, { min: number; max: number }> = {};
+  if (numericKeys.length > 0) {
+    const minMaxExprs = numericKeys.map((k) => {
+      const src = k === 'price_anchor_usd' ? 'coalesce(street_price_usd, msrp_usd)' : k;
+      return `MIN(${src}) as "min_${k}", MAX(${src}) as "max_${k}"`;
+    }).join(', ');
+    const [stats] = await query<Record<string, number>>(
+      `SELECT ${minMaxExprs} FROM web_product_core`,
+    );
+    for (const k of numericKeys) {
+      const mn = stats[`min_${k}`];
+      const mx = stats[`max_${k}`];
+      if (mn != null && mx != null) globalRange[k] = { min: mn, max: mx };
+    }
+  }
+
+  // ── FR chart (if data exists) ──
+  const hasFr = row.has_fr_data === 1;
+  let frHtml = '';
+  if (hasFr) {
+    frHtml = `
+      <div class="embed-fr-section">
+        <h3 class="embed-fr-title">${esc(t('compare.fr.title'))}</h3>
+        <div id="embed-fr-sources" class="embed-fr-sources"></div>
+        <div id="embed-fr-plot" style="width:100%;height:280px"></div>
+      </div>`;
+  }
+
   // Build spec rows — each value cell carries data-product-id and data-col
   // for the source context menu (right-click / long-press).
   // Label cells include a ? help icon with axis description tooltip.
+  // Numeric cells show a background bar indicating relative position in the DB range.
   const rowsHtml = visibleFields.map((f) => {
-    const formatted = f.format(row[f.key]);
+    const v = row[f.key];
+    const formatted = f.format(v);
     const badge = isRowValueMeasured(row, f.key) ? ' ' + measuredBadgeSvg() : '';
     // Axis description tooltip (same keys as Compare page)
     const descKey = `axisdesc.${f.key}`;
     const desc = t(descKey);
     const helpIcon = desc !== descKey ? ` <span class="col-help" data-tooltip="${esc(desc)}">?</span>` : '';
+
+    // Bar rendering for numeric values
+    const range = globalRange[f.key];
+    let barAttr = '';
+    if (typeof v === 'number' && range) {
+      const scale = getScaleForField(f.key);
+      const pct = computeBarPercent(v, range.min, range.max, scale);
+      barAttr = ` class="embed-value-cell bar-cell" style="--bar-pct:${pct.toFixed(1)}"`;
+    } else {
+      barAttr = ' class="embed-value-cell"';
+    }
+
     return `<tr>
       <td>${esc(t(f.labelKey))}${helpIcon}</td>
-      <td class="embed-value-cell" data-product-id="${esc(productId)}" data-col="${esc(f.key)}">${esc(formatted)}${badge}</td>
+      <td${barAttr} data-product-id="${esc(productId)}" data-col="${esc(f.key)}">${esc(formatted)}${badge}</td>
     </tr>`;
   }).join('');
 
@@ -252,10 +320,14 @@ export async function renderEmbedSpec(
       <div class="embed-brand">${esc(brandLabel)}</div>
       <div class="embed-product">${esc(productLabel)}</div>
     </div>
-    <div class="embed-hint">${esc(hintText)}</div>
-    <table class="embed-spec-table">
-      <tbody>${rowsHtml}</tbody>
-    </table>
+    ${frHtml}
+    <div class="embed-data-section">
+      <h3 class="embed-section-title">${esc(t('embed.related_data'))}</h3>
+      <div class="embed-hint">${esc(hintText)}</div>
+      <table class="embed-spec-table">
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
     <div class="embed-footer">
       <a class="embed-open-link" href="${compareUrl}" target="_blank" rel="noopener">${esc(openText)}</a>
       <div class="embed-powered">${poweredText}</div>
@@ -271,9 +343,87 @@ export async function renderEmbedSpec(
   setupSourceContextMenu(container);
   setupSourceMenuDismiss();
 
+  // ── Render FR chart ──
+  if (hasFr) {
+    const frRows = await query<{ product_id: string; series_type: string; points_json: string }>(
+      `SELECT product_id, series_type, points_json FROM web_fr_data WHERE product_id = ?`,
+      [productId],
+    );
+    const fr = frRows.find((r) => r.series_type === 'raw') ?? frRows[0];
+    if (fr) {
+      const points: [number, number][] = JSON.parse(fr.points_json);
+      const trace: Data = {
+        x: points.map((p) => p[0]),
+        y: points.map((p) => p[1]),
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: '#7c3aed', width: 1.5 },
+        hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
+      };
+
+      const cc = embedChartColors();
+      const layout: Partial<Layout> = {
+        xaxis: {
+          title: { text: t('compare.fr.xaxis'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
+          type: 'log',
+          gridcolor: cc.gridcolor,
+          zerolinecolor: cc.zerolinecolor,
+        },
+        yaxis: {
+          title: { text: t('compare.fr.yaxis'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
+          gridcolor: cc.gridcolor,
+          zerolinecolor: cc.zerolinecolor,
+        },
+        paper_bgcolor: cc.paper_bgcolor,
+        plot_bgcolor: cc.plot_bgcolor,
+        font: { family: 'sans-serif', size: 11, ...(cc.fontColor ? { color: cc.fontColor } : {}) },
+        margin: { l: 50, r: 16, t: 8, b: 45 },
+        showlegend: false,
+        hovermode: 'x unified',
+      };
+
+      const plotConfig: Partial<Config> = {
+        responsive: true,
+        displayModeBar: false,
+        staticPlot: false,
+      };
+
+      await Plotly.react('embed-fr-plot', [trace], layout, plotConfig);
+    }
+
+    // Populate FR source URLs
+    const frSourcesEl = container.querySelector<HTMLElement>('#embed-fr-sources');
+    if (frSourcesEl) {
+      frSourcesEl.textContent = '…';
+      fetchSourceUrls(productId, ['fr_data']).then((urls) => {
+        if (!document.body.contains(frSourcesEl)) return;
+        if (urls.length === 0) { frSourcesEl.textContent = ''; return; }
+        frSourcesEl.textContent = '';
+        const label = document.createElement('span');
+        label.textContent = t('compare.fr.sources') + ': ';
+        label.style.fontWeight = '600';
+        frSourcesEl.appendChild(label);
+        let first = true;
+        for (const url of urls) {
+          if (!first) frSourcesEl.appendChild(document.createTextNode(', '));
+          first = false;
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          try { a.textContent = new URL(url).hostname; } catch { a.textContent = url; }
+          a.title = url;
+          frSourcesEl.appendChild(a);
+        }
+      }).catch(() => {
+        if (document.body.contains(frSourcesEl)) frSourcesEl.textContent = '';
+      });
+    }
+  }
+
   // Notify parent of content height for auto-resize
-  notifyHeight();
-  observeHeight();
+  notifySize();
+  observeSize();
 }
 
 /** Detect input modality and return the i18n key for the interaction hint. */
@@ -315,23 +465,24 @@ function setupSourceContextMenu(container: HTMLElement): void {
   });
 }
 
-/** Post content height to the parent window for iframe auto-resize. */
-function notifyHeight(): void {
+/** Post content dimensions to the parent window for iframe auto-resize. */
+function notifySize(): void {
   try {
     const height = document.documentElement.scrollHeight;
-    window.parent.postMessage({ type: 'audiospecs-embed-resize', height }, '*');
+    const width = document.documentElement.scrollWidth;
+    window.parent.postMessage({ type: 'audiospecs-embed-resize', height, width }, '*');
   } catch {
     // ignore if cross-origin parent blocks postMessage
   }
 }
 
 // Observe body size changes (tooltips, source menus, dynamic content)
-let resizeObserver: ResizeObserver | null = null;
-function observeHeight(): void {
-  if (resizeObserver) return;
-  resizeObserver = new ResizeObserver(() => notifyHeight());
-  resizeObserver.observe(document.documentElement);
+let sizeObserver: ResizeObserver | null = null;
+function observeSize(): void {
+  if (sizeObserver) return;
+  sizeObserver = new ResizeObserver(() => notifySize());
+  sizeObserver.observe(document.documentElement);
 }
 
 // Also notify on window resize
-window.addEventListener('resize', () => notifyHeight());
+window.addEventListener('resize', () => notifySize());

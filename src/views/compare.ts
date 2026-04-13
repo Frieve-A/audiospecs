@@ -2,7 +2,7 @@ import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min'
 import { query } from '../db/database';
 import { getCategoryLabel, getScaleForField, computeBarPercent, getAxis } from '../presets';
 import { t, getLocale, tAxis } from '../i18n';
-import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss, fetchAllSourceUrls } from '../sources';
+import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss, fetchAllSourceUrls, fetchSourceUrls } from '../sources';
 import { setupColHelpTooltips } from '../components/col-help';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { attachClearable } from '../components/clearable-input';
@@ -337,6 +337,7 @@ export async function renderCompare(
           <div class="card-body">
             <h3 style="margin:0 0 0.5rem">${t('compare.fr.title')}</h3>
             <div id="compare-fr-plot" style="width:100%;height:400px"></div>
+            <div id="compare-fr-sources" class="fr-sources-row" style="margin-top:0.5rem;font-size:13px;color:var(--text-secondary, #666)"></div>
           </div>
         </div>
       `;
@@ -504,6 +505,42 @@ export async function renderCompare(
             });
           });
         }
+      }
+    }
+
+    // Populate FR source URLs
+    if (frProductIds.length > 0) {
+      const frSourcesEl = contentEl.querySelector<HTMLElement>('#compare-fr-sources');
+      if (frSourcesEl) {
+        frSourcesEl.textContent = '…';
+        const allFrUrls = new Set<string>();
+        Promise.all(frProductIds.map((pid) => fetchSourceUrls(pid, ['fr_data']))).then((results) => {
+          for (const urls of results) urls.forEach((u) => allFrUrls.add(u));
+          if (!document.body.contains(frSourcesEl)) return;
+          if (allFrUrls.size === 0) {
+            frSourcesEl.textContent = '';
+            return;
+          }
+          frSourcesEl.textContent = '';
+          const label = document.createElement('span');
+          label.textContent = t('compare.fr.sources') + ': ';
+          label.style.fontWeight = '600';
+          frSourcesEl.appendChild(label);
+          let first = true;
+          for (const url of allFrUrls) {
+            if (!first) frSourcesEl.appendChild(document.createTextNode(', '));
+            first = false;
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            try { a.textContent = new URL(url).hostname; } catch { a.textContent = url; }
+            a.title = url;
+            frSourcesEl.appendChild(a);
+          }
+        }).catch(() => {
+          if (document.body.contains(frSourcesEl)) frSourcesEl.textContent = '';
+        });
       }
     }
 
