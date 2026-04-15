@@ -134,7 +134,20 @@ const SECTIONS: HomeSection[] = [
       staticChart: true,
     },
   },
-  // 10. Speaker: Price vs Preference Score
+  // 10. Table: Speaker, Freq Low ascending
+  {
+    type: 'table',
+    descKey: 'home.section.top_spk_freq_low',
+    config: {
+      id: 'top-spk-freq-low',
+      categories: ['speaker'],
+      sort: 'freq_low_hz',
+      sortDir: 'asc',
+      limit: 10,
+      columns: ['freq_low_hz', 'price_anchor_usd'],
+    },
+  },
+  // 11. Speaker: Price vs Preference Score
   {
     type: 'scatter',
     descKey: 'home.section.price_preference',
@@ -147,7 +160,7 @@ const SECTIONS: HomeSection[] = [
       staticChart: true,
     },
   },
-  // 11. Table: Speaker, Preference Score descending
+  // 12. Table: Speaker, Preference Score descending
   {
     type: 'table',
     descKey: 'home.section.top_spk_preference',
@@ -158,19 +171,6 @@ const SECTIONS: HomeSection[] = [
       sortDir: 'desc',
       limit: 10,
       columns: ['preference_score', 'price_anchor_usd'],
-    },
-  },
-  // 12. Table: Speaker, Freq Low ascending
-  {
-    type: 'table',
-    descKey: 'home.section.top_spk_freq_low',
-    config: {
-      id: 'top-spk-freq-low',
-      categories: ['speaker'],
-      sort: 'freq_low_hz',
-      sortDir: 'asc',
-      limit: 10,
-      columns: ['freq_low_hz', 'price_anchor_usd'],
     },
   },
   // 11. All categories: Price vs Weight, category color

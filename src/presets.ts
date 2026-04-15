@@ -14,6 +14,17 @@ export interface AxisDef {
 /** Minimum number of non-null data points required to show an axis in the dropdown */
 export const AXIS_MIN_POINTS = 10;
 
+/** SQL expression that appends variant info to product_name when variant is not 'standard'. */
+export const PRODUCT_NAME_EXPR = `CASE WHEN p.variant <> 'standard' THEN p.product_name || ' (' || p.variant || ')' ELSE p.product_name END`;
+
+/** Format a display product name from a row that has product_name and variant fields. */
+export function productDisplayName(row: { product_name: string; variant?: string | null }): string {
+  if (row.variant && row.variant !== 'standard') {
+    return `${row.product_name} (${row.variant})`;
+  }
+  return row.product_name;
+}
+
 export interface Preset {
   id: string;
   x: string;

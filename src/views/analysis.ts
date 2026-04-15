@@ -1,6 +1,6 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, computeParetoFrontier, clampForScatter, axisHasSourceVariants, axisMatchesDataSource, getAxisSourceKind, resolveAxisSource, validDataSourcesForAxis, isVariantAxisId, type Preset, type DataSource, type XDataSource, type YDataSource } from '../presets';
+import { PRESETS, getAxis, getAxesForCategories, getValidCategories, getPresetsForCategories, getCategoryLabel, getAxisLabel, getPresetPurpose, buildBetterAnnotations, computeParetoFrontier, clampForScatter, axisHasSourceVariants, axisMatchesDataSource, getAxisSourceKind, resolveAxisSource, validDataSourcesForAxis, isVariantAxisId, PRODUCT_NAME_EXPR, type Preset, type DataSource, type XDataSource, type YDataSource } from '../presets';
 import { t, tAxisDesc, getLocale } from '../i18n';
 import { navigate } from '../router';
 import { fetchSourceUrls } from '../sources';
@@ -635,7 +635,7 @@ export async function renderAnalysis(
       SELECT
         p.product_id,
         CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
-        p.product_name,
+        ${PRODUCT_NAME_EXPR} as product_name,
         p.category_primary,
         ${xSrc} as x_val,
         ${ySrc} as y_val,

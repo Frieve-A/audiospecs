@@ -7,7 +7,7 @@
 
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { getCategoryLabel, getAxis, getScaleForField, computeBarPercent } from '../presets';
+import { getCategoryLabel, getAxis, getScaleForField, computeBarPercent, productDisplayName } from '../presets';
 import { t } from '../i18n';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { setupColHelpTooltips } from '../components/col-help';
@@ -139,6 +139,7 @@ interface ProductRow {
   brand_name_en: string;
   manufacturer_name_en: string;
   product_name: string;
+  variant: string;
   category_primary: string;
   [key: string]: unknown;
 }
@@ -234,7 +235,7 @@ export async function renderEmbedSpec(
   }
 
   const brandLabel = row.brand_name_en || t('common.unknown');
-  const productLabel = row.product_name;
+  const productLabel = productDisplayName(row);
   const category = row.category_primary;
   const categoryLabel = getCategoryLabel(category);
   const productId = row.product_id;

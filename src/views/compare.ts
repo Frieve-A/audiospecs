@@ -1,6 +1,6 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
-import { getCategoryLabel, getScaleForField, computeBarPercent, getAxis } from '../presets';
+import { getCategoryLabel, getScaleForField, computeBarPercent, getAxis, productDisplayName } from '../presets';
 import { t, getLocale, tAxis } from '../i18n';
 import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss, fetchAllSourceUrls, fetchSourceUrls } from '../sources';
 import { setupColHelpTooltips } from '../components/col-help';
@@ -188,7 +188,8 @@ export async function renderCompare(
     const compareFields = filterFieldsForSplitMode(getCompareFields(), split);
     // Transposed layout matching the display: rows = fields, columns = products
     const visibleFields = compareFields.filter((f) => ordered.some((r) => r[f.key] != null));
-    const productNames = ordered.map((r) => `${r.brand_label} ${r.product_name}`);
+    const productNames = ordered.map((r) => `${r.brand_label} ${productDisplayName(r as unknown as { product_name: string; variant?: string })}`);
+
     const headerRow = ['', ...productNames];
     const fieldRows = visibleFields.map((f) => [
       t(f.labelKey),
@@ -234,8 +235,8 @@ export async function renderCompare(
         return;
       }
       const like = `%${q}%`;
-      const results = await query<{ product_id: string; brand_name_en: string; product_name: string; category_primary: string }>(
-        `SELECT product_id, brand_name_en, product_name, category_primary
+      const results = await query<{ product_id: string; brand_name_en: string; product_name: string; variant: string; category_primary: string }>(
+        `SELECT product_id, brand_name_en, product_name, variant, category_primary
          FROM web_product_core
          WHERE product_name LIKE ? OR brand_name_en LIKE ?
          LIMIT 10`,
@@ -248,7 +249,7 @@ export async function renderCompare(
           .map(
             (r) => `
           <div class="search-result-item" data-id="${r.product_id}">
-            ${r.product_name}
+            ${productDisplayName(r)}
             <div class="result-brand">${r.brand_name_en || t('common.unknown')} · ${getCategoryLabel(r.category_primary)}</div>
           </div>`,
           )
@@ -350,7 +351,7 @@ export async function renderCompare(
             <div class="compare-header compare-corner"></div>
             ${ordered.map((r) => `
               <div class="compare-header">
-                ${r.brand_label} ${r.product_name}
+                ${r.brand_label} ${productDisplayName(r as unknown as { product_name: string; variant?: string })}
                 <br/><button class="remove-compare" data-id="${r.product_id}" style="font-size:0.7rem;margin-top:0.25rem">${t('common.remove')}</button>
               </div>
             `).join('')}
@@ -435,7 +436,7 @@ export async function renderCompare(
           y: points.map((p) => p[1]),
           type: 'scatter',
           mode: 'lines',
-          name: `${ordered[i].brand_label} ${ordered[i].product_name}`,
+          name: `${ordered[i].brand_label} ${productDisplayName(ordered[i] as unknown as { product_name: string; variant?: string })}`,
           line: { color: TRACE_COLORS[i % TRACE_COLORS.length], width: 1.5, dash },
           hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
         });

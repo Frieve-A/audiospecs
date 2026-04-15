@@ -1,5 +1,5 @@
 import { query } from '../db/database';
-import { getScaleForField, computeBarPercent, getCategoryLabel } from '../presets';
+import { getScaleForField, computeBarPercent, getCategoryLabel, PRODUCT_NAME_EXPR } from '../presets';
 import { navigate } from '../router';
 import { t, tAxis, getLocale } from '../i18n';
 import { showSourceMenu, setupSourceMenuDismiss } from '../sources';
@@ -109,7 +109,7 @@ export async function renderTableWidget(
     SELECT
       p.product_id,
       CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
-      p.product_name,
+      ${PRODUCT_NAME_EXPR} as product_name,
       p.category_primary,
       ${allSelectParts.join(', ')}
     FROM web_product_core p

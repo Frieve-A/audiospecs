@@ -1,5 +1,5 @@
 import { query } from '../db/database';
-import { AXES, CATEGORY_KEYS, getCategoryLabel, getScaleForField, computeBarPercent } from '../presets';
+import { AXES, CATEGORY_KEYS, getCategoryLabel, getScaleForField, computeBarPercent, PRODUCT_NAME_EXPR } from '../presets';
 import { navigate } from '../router';
 import { t, tAxis, getLocale } from '../i18n';
 import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss } from '../sources';
@@ -356,7 +356,7 @@ export async function renderExplore(
       SELECT
         p.product_id,
         CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
-        p.product_name,
+        ${PRODUCT_NAME_EXPR} as product_name,
         p.category_primary${numericSelectClause}
       FROM web_product_core p
       ${where}
@@ -620,7 +620,7 @@ export async function renderExplore(
     const sql = `
       SELECT
         CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
-        p.product_name,
+        ${PRODUCT_NAME_EXPR} as product_name,
         p.category_primary${numericSelectClause}
       FROM web_product_core p
       ${where}
