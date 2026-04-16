@@ -12,6 +12,7 @@ import { t } from '../i18n';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { setupColHelpTooltips } from '../components/col-help';
 import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls } from '../sources';
+import { getExtendedCompactFields, isCompactFieldVisible } from '../format-utils';
 
 /* ── Theme helper for chart colors ── */
 
@@ -108,6 +109,7 @@ function getSpecFields(): SpecField[] {
         return String(v);
       }
     } },
+    { key: 'power_consumption_w', labelKey: 'compare.field.power_w', format: (v) => v != null ? sig3(Number(v)) : '—' },
   ];
 }
 
@@ -306,6 +308,19 @@ export async function renderEmbedSpec(
     </tr>`;
   }).join('');
 
+  // Compact fields (extended attributes)
+  const compactRowsHtml = getExtendedCompactFields()
+    .filter((cf) => isCompactFieldVisible(cf, row))
+    .map((cf) => {
+      const html = cf.formatRow(row);
+      if (html == null) return '';
+      const colIds = JSON.stringify(cf.sourceKeys);
+      return `<tr>
+        <td>${esc(t(cf.labelKey))}</td>
+        <td class="embed-value-cell embed-compact-cell" data-product-id="${esc(productId)}" data-compact-cols='${esc(colIds)}'>${html}</td>
+      </tr>`;
+    }).join('');
+
   // Interaction hint (same modality detection as the main app)
   const hintKey = getInteractionHintKey();
   const hintText = t(hintKey);
@@ -326,7 +341,7 @@ export async function renderEmbedSpec(
       <h3 class="embed-section-title">${esc(t('embed.related_data'))}</h3>
       <div class="embed-hint">${esc(hintText)}</div>
       <table class="embed-spec-table">
-        <tbody>${rowsHtml}</tbody>
+        <tbody>${rowsHtml}${compactRowsHtml}</tbody>
       </table>
     </div>
     <div class="embed-footer">
@@ -459,6 +474,25 @@ function setupSourceContextMenu(container: HTMLElement): void {
         ev.preventDefault();
         const touch = ev.changedTouches[0] || ev.touches[0];
         showSourceMenu(touch.clientX, touch.clientY, cell.dataset.productId!, [cell.dataset.col!]);
+      }, 500);
+    }, { passive: false });
+    cell.addEventListener('touchend', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
+    cell.addEventListener('touchmove', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
+  });
+
+  // Compact cells (sourceKeys stored in data attribute)
+  container.querySelectorAll<HTMLElement>('.embed-compact-cell[data-product-id][data-compact-cols]').forEach((cell) => {
+    const colIds: string[] = JSON.parse(cell.dataset.compactCols!);
+    cell.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showSourceMenu(e.clientX, e.clientY, cell.dataset.productId!, colIds);
+    });
+    let longTapTimer: ReturnType<typeof setTimeout> | null = null;
+    cell.addEventListener('touchstart', (ev) => {
+      longTapTimer = setTimeout(() => {
+        ev.preventDefault();
+        const touch = ev.changedTouches[0] || ev.touches[0];
+        showSourceMenu(touch.clientX, touch.clientY, cell.dataset.productId!, colIds);
       }, 500);
     }, { passive: false });
     cell.addEventListener('touchend', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });

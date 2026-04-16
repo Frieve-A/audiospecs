@@ -749,10 +749,9 @@ button.danger:hover {
   overflow-x: auto;
 }
 
-/* Explore table: enable vertical scrolling inside card while keeping sticky header/columns. */
+/* Explore table: horizontal scroll only, no vertical height cap. */
 .data-table-wrap.fixed-table-wrap {
-  overflow: auto;
-  max-height: 70vh;
+  overflow-x: auto;
 }
 
 /* Add inner spacing now that card-body padding is removed for this block. */
@@ -967,8 +966,7 @@ table.data-table .numeric {
 
 /* ── Compare ── */
 .compare-scroll {
-  overflow: auto;
-  max-height: 70vh;
+  overflow-x: auto;
 }
 
 .compare-grid {
@@ -1032,6 +1030,37 @@ table.data-table .numeric {
   background: var(--bar-fill);
   width: calc((100% - 0.43rem) * var(--bar-pct, 0) / 100);
   pointer-events: none;
+}
+
+/* ── Compact cell / Attribute tags ── */
+.compare-grid .compare-cell.compact-cell {
+  text-align: left;
+  font-family: var(--font-body, inherit);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  cursor: context-menu;
+}
+
+.attr-tag {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  background: var(--tag-bg, #f0f0f0);
+  color: var(--tag-text, #333);
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .attr-tag {
+  --tag-bg: #333;
+  --tag-text: #ddd;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] .attr-tag {
+    --tag-bg: #333;
+    --tag-text: #ddd;
+  }
 }
 
 /* ── Presets bar ── */

@@ -303,6 +303,23 @@ html, body {
   text-align: right;
 }
 
+/* ── Compact cells / Attribute tags ── */
+.embed-compact-cell {
+  text-align: left !important;
+  font-family: var(--embed-font) !important;
+  line-height: 1.6;
+}
+
+.attr-tag {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  background: var(--embed-badge-bg);
+  color: var(--embed-text-secondary);
+  white-space: nowrap;
+}
+
 /* ── Value cells (context menu target + bar) ── */
 .embed-value-cell {
   cursor: context-menu;

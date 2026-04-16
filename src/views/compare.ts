@@ -7,6 +7,7 @@ import { setupColHelpTooltips } from '../components/col-help';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { attachClearable } from '../components/clearable-input';
 import { chartColors } from '../theme';
+import { sig3 as _sig3, formatHz as _formatHz, escHtml as _escHtml, getExtendedCompactFields, isCompactFieldVisible, type CompactField } from '../format-utils';
 
 let cleanupDocListener: (() => void) | null = null;
 
@@ -122,6 +123,7 @@ function getCompareFields() {
         return String(v);
       }
     } },
+    { key: 'power_consumption_w', labelKey: 'compare.field.power_w', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
   ];
 }
 
@@ -393,6 +395,17 @@ export async function renderCompare(
                 return `<div class="compare-cell">${f.format(v)}</div>`;
               }).join('')}`;
             }).join('')}
+            ${getExtendedCompactFields().filter((cf) => ordered.some((r) => isCompactFieldVisible(cf, r) && cf.formatRow(r) != null)).map((cf) => `
+              <div class="compare-label">${escHtml(t(cf.labelKey))}</div>
+              ${ordered.map((r) => {
+                const pid = r.product_id as string;
+                if (!isCompactFieldVisible(cf, r)) return `<div class="compare-cell">—</div>`;
+                const html = cf.formatRow(r);
+                if (html == null) return `<div class="compare-cell">—</div>`;
+                const colIds = JSON.stringify(cf.sourceKeys);
+                return `<div class="compare-cell compact-cell" data-product-id="${pid}" data-compact-cols='${escHtml(colIds)}'>${html}</div>`;
+              }).join('')}
+            `).join('')}
             <div class="compare-label">${t('compare.field.search')}</div>
             ${ordered.map((r) => `<div class="compare-cell" style="display:flex;justify-content:center"><div class="search-icons">
               <button class="search-google" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Google">
@@ -631,6 +644,25 @@ export async function renderCompare(
           ev.preventDefault();
           const touch = ev.changedTouches[0] || ev.touches[0];
           showSourceMenu(touch.clientX, touch.clientY, cell.dataset.productId!, [cell.dataset.col!]);
+        }, 500);
+      }, { passive: false });
+      cell.addEventListener('touchend', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
+      cell.addEventListener('touchmove', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
+    });
+
+    // Source context menu on compact cells (sourceKeys stored in data attribute)
+    contentEl.querySelectorAll<HTMLElement>('.compact-cell[data-product-id][data-compact-cols]').forEach((cell) => {
+      const colIds: string[] = JSON.parse(cell.dataset.compactCols!);
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showSourceMenu(e.clientX, e.clientY, cell.dataset.productId!, colIds);
+      });
+      let longTapTimer: ReturnType<typeof setTimeout> | null = null;
+      cell.addEventListener('touchstart', (ev) => {
+        longTapTimer = setTimeout(() => {
+          ev.preventDefault();
+          const touch = ev.changedTouches[0] || ev.touches[0];
+          showSourceMenu(touch.clientX, touch.clientY, cell.dataset.productId!, colIds);
         }, 500);
       }, { passive: false });
       cell.addEventListener('touchend', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
