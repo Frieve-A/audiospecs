@@ -633,7 +633,7 @@ export async function renderProduct(
       [category],
     );
 
-    const rankingAxes = getRankingAxes(false);
+    const rankingAxes = getRankingAxes(false).filter((a) => a.id !== 'release_year');
     const highlights = new Map<string, string>();
     highlights.set(pid, '#dc2626');
 

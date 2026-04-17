@@ -81,6 +81,7 @@ function getCompareFields() {
   return [
     { key: 'category_primary', labelKey: 'compare.field.category', format: (v: unknown) => getCategoryLabel(v as string) },
     { key: 'price_anchor_usd', labelKey: 'compare.field.price', format: (v: unknown) => v != null ? Math.round(Number(v)).toLocaleString() : '—' },
+    { key: 'release_year', labelKey: 'compare.field.year', format: (v: unknown) => v ?? '—' },
     { key: 'sinad_db', labelKey: 'compare.field.sinad', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'sinad_db_measured', labelKey: 'compare.field.sinad_measured', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'sinad_db_spec', labelKey: 'compare.field.sinad_spec', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
@@ -820,7 +821,7 @@ export async function renderCompare(
           );
         }
 
-        const rankingAxes = getRankingAxes(split);
+        const rankingAxes = getRankingAxes(split).filter((a) => a.id !== 'release_year');
         createRankingSection(
           contentEl,
           rankingAxes,
