@@ -7,6 +7,7 @@ import { setupColHelpTooltips } from '../components/col-help';
 import { showToast } from '../toast';
 import { isMultiSourceBaseKey, isRowValueMeasured, MEASURED_FLAG_PREFIX, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { attachClearable } from '../components/clearable-input';
+import { setupViewportTable } from '../components/viewport-table';
 import { MAX_COMPARE_PRODUCTS } from './compare';
 import {
   type FilterPanelState, type BoolFilterState,
@@ -459,7 +460,7 @@ export async function renderExplore(
       ? rows
           .map(
             (r) => `
-          <tr class="explore-row" data-brand="${escHtml(String(r.brand_label || ''))}" data-product="${escHtml(String(r.product_name || ''))}">
+          <tr class="explore-row" title="${t('explore.open_product')}" data-brand="${escHtml(String(r.brand_label || ''))}" data-product="${escHtml(String(r.product_name || ''))}">
             ${activeCols.map((col) => {
               const v = r[col.key];
               const fixedClass = FIXED_COLUMN_KEYS.has(col.key) ? 'fixed-col' : '';
@@ -851,6 +852,11 @@ export async function renderExplore(
   });
 
   setupSourceMenuDismiss();
+
+  // Viewport-filling height + scroll trapping for the table wrapper
+  const tableWrap = document.getElementById('explore-table-wrap');
+  if (tableWrap) setupViewportTable(tableWrap);
+
   syncUrl();
   renderThead();
   await loadData();

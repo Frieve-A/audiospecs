@@ -213,6 +213,7 @@ export const ja: Record<string, string> = {
   'explore.prev': '← 前へ',
   'explore.next': '次へ →',
   'explore.add_to_compare': '比較に追加 (Ctrl+クリックでこのページに留まる)',
+  'explore.open_product': '製品詳細ページを開く',
 
   // Compare
   'compare.title': '製品比較',
@@ -329,12 +330,13 @@ export const ja: Record<string, string> = {
   'product.back_to_explore': '一覧に戻る',
   'product.add_to_compare': '比較に追加',
   'product.specifications': 'スペック',
-  'analysis.ctx.details': '詳細',
+  'product.rankings': 'ランキング',
+  'analysis.ctx.details': '製品詳細ページを開く',
 
   // Embed widget
   'embed.error.not_found': '製品が見つかりません',
   'embed.error.search_link': 'Frieve - AudioSpecs で検索',
-  'embed.open_in_audiospecs': 'Frieve - AudioSpecs で他の製品と比較',
+  'embed.open_in_audiospecs': 'Frieve - AudioSpecs で詳細を表示',
   'embed.related_data': '関連データ',
   'embed.hint.mouse': '値を右クリックでソースを表示',
   'embed.hint.touch': '値をロングタップでソースを表示',

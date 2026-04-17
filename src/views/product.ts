@@ -16,6 +16,7 @@ import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls, fetchAllSource
 import { getExtendedCompactFields, isCompactFieldVisible, escHtml as _escHtml, sig3 as _sig3, formatHz as _formatHz } from '../format-utils';
 import { chartColors } from '../theme';
 import { navigate } from '../router';
+import { getRankingAxes, buildRankingData, createRankingSection } from '../components/ranking-bar-widget';
 
 /* ── Helpers (re-exported from format-utils) ── */
 
@@ -377,6 +378,7 @@ export async function renderProduct(
         </div>
       </div>
     </div>
+    <div id="product-ranking-section"></div>
   `;
 
   // ── Add to compare button ──
@@ -502,6 +504,32 @@ export async function renderProduct(
     }).catch(() => {
       if (document.body.contains(allSourcesEl)) allSourcesEl.textContent = '—';
     });
+  }
+
+  // ── Ranking bar charts ──
+  const rankingSectionEl = container.querySelector<HTMLElement>('#product-ranking-section');
+  if (rankingSectionEl) {
+    // Fetch all products in the same category for ranking
+    const categoryProducts = await query<Record<string, unknown>>(
+      `SELECT p.*,
+        coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd,
+        CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END AS brand_label
+      FROM web_product_core p
+      WHERE p.category_primary = ?`,
+      [category],
+    );
+
+    const rankingAxes = getRankingAxes(false);
+    const highlights = new Map<string, string>();
+    highlights.set(pid, '#dc2626');
+
+    createRankingSection(
+      rankingSectionEl,
+      rankingAxes,
+      categoryProducts,
+      highlights,
+      t('product.rankings'),
+    );
   }
 }
 

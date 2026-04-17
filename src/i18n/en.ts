@@ -213,6 +213,7 @@ export const en: Record<string, string> = {
   'explore.prev': '← Prev',
   'explore.next': 'Next →',
   'explore.add_to_compare': 'Add to compare (Ctrl+click to stay on this page)',
+  'explore.open_product': 'Open product detail page',
 
   // Compare
   'compare.title': 'Compare Products',
@@ -329,12 +330,13 @@ export const en: Record<string, string> = {
   'product.back_to_explore': 'Back to Explore',
   'product.add_to_compare': 'Add to Compare',
   'product.specifications': 'Specifications',
-  'analysis.ctx.details': 'Details',
+  'product.rankings': 'Rankings',
+  'analysis.ctx.details': 'Open product detail page',
 
   // Embed widget
   'embed.error.not_found': 'Product not found',
   'embed.error.search_link': 'Search on Frieve - AudioSpecs',
-  'embed.open_in_audiospecs': 'Compare with other products on Frieve - AudioSpecs',
+  'embed.open_in_audiospecs': 'View details on Frieve - AudioSpecs',
   'embed.related_data': 'Related Data',
   'embed.hint.mouse': 'Right-click a value to view sources',
   'embed.hint.touch': 'Long-press a value to view sources',

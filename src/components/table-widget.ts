@@ -6,6 +6,7 @@ import { showSourceMenu, setupSourceMenuDismiss } from '../sources';
 import { showToast } from '../toast';
 import { isMultiSourceBaseKey, isRowValueMeasured, MEASURED_FLAG_PREFIX, measuredBadgeSvg, setupMeasuredBadgeTooltips } from './measured-indicator';
 import { MAX_COMPARE_PRODUCTS } from '../views/compare';
+import { productPageUrl } from '../views/product';
 
 export interface TableWidgetConfig {
   id: string;
@@ -137,7 +138,7 @@ export async function renderTableWidget(
   }).join('') + `<th>${t('explore.col.compare')}</th><th>${t('explore.col.search')}</th>`;
 
   const tbodyHtml = rows.map((r) => `
-    <tr>
+    <tr class="explore-row" title="${t('explore.open_product')}" data-brand="${escHtml(String(r.brand_label || ''))}" data-product="${escHtml(String(r.product_name || ''))}">
       ${allCols.map((col) => {
         const v = r[col.key];
         if (col.numeric) {
@@ -245,6 +246,20 @@ export async function renderTableWidget(
     }, { passive: false });
     td.addEventListener('touchend', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
     td.addEventListener('touchmove', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
+  });
+
+  // Row click → navigate to product detail page
+  tableEl.querySelectorAll<HTMLElement>('tr.explore-row').forEach((tr) => {
+    tr.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, .col-action, .search-icons')) return;
+      const brand = tr.dataset.brand || '';
+      const product = tr.dataset.product || '';
+      if (!brand || !product) return;
+      const url = productPageUrl(brand, product);
+      history.pushState(null, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
   });
 
   // Tap/hover tooltip for the measured-value gauge badge

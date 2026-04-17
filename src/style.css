@@ -923,9 +923,10 @@ button.danger:hover {
   overflow-x: auto;
 }
 
-/* Explore table: horizontal scroll only, no vertical height cap. */
+/* Explore table: scroll both axes; max-height set by JS (viewport-table.ts). */
 .data-table-wrap.fixed-table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
 }
 
 /* Add inner spacing now that card-body padding is removed for this block. */
@@ -1163,8 +1164,10 @@ table.data-table .numeric {
   color: var(--text-tertiary);
 }
 
+/* max-height set by JS (viewport-table.ts) */
 .compare-scroll {
   overflow-x: auto;
+  overflow-y: auto;
 }
 
 .compare-grid {
@@ -1183,10 +1186,11 @@ table.data-table .numeric {
   text-align: center;
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 2;
 }
 
 .compare-grid .compare-corner {
+  left: 0;
   z-index: 4;
 }
 
@@ -1202,7 +1206,7 @@ table.data-table .numeric {
   border-right: 1px solid var(--border-light);
   position: sticky;
   left: 0;
-  z-index: 2;
+  z-index: 3;
 }
 
 .compare-grid .compare-cell {
@@ -1466,6 +1470,18 @@ table.data-table .numeric {
   #explore-table td.fixed-col {
     position: static;
     background: transparent;
+    z-index: auto;
+  }
+
+  /* Mobile: disable left-sticky on compare grid, matching explore fixed-col approach */
+  .compare-grid .compare-label {
+    position: static;
+    background: var(--bg-secondary);
+    z-index: auto;
+  }
+
+  .compare-grid .compare-corner {
+    left: auto;
     z-index: auto;
   }
 
@@ -1970,10 +1986,12 @@ tr.explore-row {
   cursor: pointer;
 }
 
-tr.explore-row:hover td {
+tr.explore-row:hover td,
+#explore-table tr.explore-row:hover td.fixed-col {
   background: var(--accent-light);
 }
 
-[data-theme="dark"] tr.explore-row:hover td {
+[data-theme="dark"] tr.explore-row:hover td,
+[data-theme="dark"] #explore-table tr.explore-row:hover td.fixed-col {
   background: rgba(37, 99, 235, 0.12);
 }

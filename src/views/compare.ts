@@ -8,8 +8,11 @@ import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from
 import { attachClearable } from '../components/clearable-input';
 import { chartColors } from '../theme';
 import { sig3 as _sig3, formatHz as _formatHz, escHtml as _escHtml, getExtendedCompactFields, isCompactFieldVisible, type CompactField } from '../format-utils';
+import { getRankingAxes, createRankingSection } from '../components/ranking-bar-widget';
+import { setupViewportTable } from '../components/viewport-table';
 
 let cleanupDocListener: (() => void) | null = null;
+let cleanupViewportTable: (() => void) | null = null;
 
 const STORAGE_KEY = 'compare_ids';
 const SPLIT_STORAGE_KEY = 'compare_split_measured';
@@ -201,7 +204,22 @@ export async function renderCompare(
         return formatFieldCsv(f.key, v);
       }),
     ]);
-    downloadCsv([headerRow, ...fieldRows], 'audiospecs_compare.csv');
+
+    // Append compact (extended) fields
+    const compactFields = getExtendedCompactFields()
+      .filter((cf) => ordered.some((r) => isCompactFieldVisible(cf, r) && cf.formatRow(r) != null));
+    const compactRows = compactFields.map((cf) => [
+      t(cf.labelKey),
+      ...ordered.map((r) => {
+        if (!isCompactFieldVisible(cf, r)) return '';
+        const html = cf.formatRow(r);
+        if (html == null) return '';
+        // Strip HTML tags for CSV (e.g. tagBadges <span> wrappers)
+        return html.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
+      }),
+    ]);
+
+    downloadCsv([headerRow, ...fieldRows, ...compactRows], 'audiospecs_compare.csv');
   });
 
   // Split spec/measured toggle
@@ -355,7 +373,8 @@ export async function renderCompare(
     }
 
     contentEl.innerHTML = frHtml + `
-      <div class="card">
+      <div class="card" style="margin-top:1rem">
+        <h3 style="margin:0 0 0;padding:1.25rem 1.25rem 0.5rem">${t('product.specifications')}</h3>
         <div class="card-body compare-scroll">
           <div class="compare-grid" style="grid-template-columns: 180px repeat(${ordered.length}, minmax(160px, 1fr))">
             <div class="compare-header compare-corner"></div>
@@ -566,8 +585,12 @@ export async function renderCompare(
       }
     }
 
-    // Column help tooltips on compare labels
+    // Viewport-filling height + scroll trapping for the compare scroll container
     const compareScroll = contentEl.querySelector<HTMLElement>('.compare-scroll');
+    if (cleanupViewportTable) cleanupViewportTable();
+    if (compareScroll) cleanupViewportTable = setupViewportTable(compareScroll);
+
+    // Column help tooltips on compare labels
     setupColHelpTooltips(contentEl, compareScroll);
     // Tap/hover tooltip for the measured-value gauge badge
     setupMeasuredBadgeTooltips(contentEl, compareScroll);
@@ -676,6 +699,42 @@ export async function renderCompare(
       cell.addEventListener('touchend', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
       cell.addEventListener('touchmove', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
     });
+
+    // ── Ranking bar charts ──
+    if (ordered.length >= 1) {
+      const TRACE_COLORS_RANK = ['#7c3aed', '#db2777', '#2563eb', '#059669', '#d97706'];
+      // Determine categories of compared products; fetch all products per category
+      const categories = [...new Set(ordered.map((r) => r.category_primary as string))];
+      for (const cat of categories) {
+        const catProducts = await query<Record<string, unknown>>(
+          `SELECT p.*,
+            coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd,
+            CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END AS brand_label
+          FROM web_product_core p
+          WHERE p.category_primary = ?`,
+          [cat],
+        );
+
+        const highlights = new Map<string, string>();
+        const catOrdered = ordered.filter((r) => r.category_primary === cat);
+        for (const r of catOrdered) {
+          const globalIdx = ordered.indexOf(r);
+          highlights.set(
+            r.product_id as string,
+            TRACE_COLORS_RANK[globalIdx % TRACE_COLORS_RANK.length],
+          );
+        }
+
+        const rankingAxes = getRankingAxes(split);
+        createRankingSection(
+          contentEl,
+          rankingAxes,
+          catProducts,
+          highlights,
+          `${t('product.rankings')} — ${getCategoryLabel(cat)}`,
+        );
+      }
+    }
   }
 
   setupSourceMenuDismiss();

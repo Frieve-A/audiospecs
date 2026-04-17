@@ -325,8 +325,9 @@ export async function renderEmbedSpec(
   const hintKey = getInteractionHintKey();
   const hintText = t(hintKey);
 
-  // Compare link
-  const compareUrl = `https://audiospecs.frieve.com/compare?ids=${encodeURIComponent(productId)}`;
+  // Product detail link (slugified brand + product name)
+  const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const compareUrl = `https://audiospecs.frieve.com/product/${slug(brandLabel)}/${slug(productLabel)}`;
   const openText = t('embed.open_in_audiospecs');
   const poweredText = 'Powered by AudioSpecs';
 
