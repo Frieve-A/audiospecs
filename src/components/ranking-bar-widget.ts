@@ -44,6 +44,8 @@ export interface RankingBarConfig {
   highlights: Map<string, string>;
   /** Chart height in px (default 250) */
   height?: number;
+  /** Product ID to exclude from click navigation (e.g. self on product page) */
+  selfProductId?: string;
 }
 
 /* ── Value formatter (mirrors scatter-widget fmtAxis) ── */
@@ -458,8 +460,8 @@ export function renderRankingBarWidget(
     if (!pt) return;
     const item = sorted[pt.pointIndex];
     if (!item) return;
-    // Don't navigate if clicking on a highlighted product in product page (self)
-    if (highlights.size === 1 && highlights.has(item.product_id)) return;
+    // Don't navigate if clicking on self (product page)
+    if (config.selfProductId && item.product_id === config.selfProductId) return;
     const brand = item.brand_label || 'unknown';
     const url = `/product/${slugify(brand)}/${slugify(item.product_name)}`;
     history.pushState(null, '', url);
@@ -502,6 +504,78 @@ export function buildRankingData(
   return items;
 }
 
+/* ── Ranking list helper ── */
+
+function populateRankingList(
+  listEl: HTMLElement,
+  data: RankingBarDataItem[],
+  axis: AxisDef,
+  highlights: Map<string, string>,
+): void {
+  const total = data.length;
+  if (total === 0) return;
+
+  const betterIsHigher = axis.better === 'higher';
+  const useLog = axis.scale === 'log';
+  const validData = useLog ? data.filter((d) => d.value > 0) : data;
+  const totalValid = validData.length;
+
+  // Sort ascending by value
+  const sorted = [...validData].sort((a, b) => a.value - b.value);
+
+  // Build rank map (standard competition ranking, rank 1 = best)
+  const rankMap = new Map<string, number>();
+  if (betterIsHigher) {
+    for (let i = totalValid - 1; i >= 0; i--) {
+      let rank = totalValid - i;
+      if (i < totalValid - 1 && sorted[i].value === sorted[i + 1].value) {
+        rank = rankMap.get(sorted[i + 1].product_id)!;
+      }
+      rankMap.set(sorted[i].product_id, rank);
+    }
+  } else {
+    for (let i = 0; i < totalValid; i++) {
+      let rank = i + 1;
+      if (i > 0 && sorted[i].value === sorted[i - 1].value) {
+        rank = rankMap.get(sorted[i - 1].product_id)!;
+      }
+      rankMap.set(sorted[i].product_id, rank);
+    }
+  }
+
+  // Count how many products share each rank (for tie ranges)
+  const tieCount = new Map<number, number>();
+  for (const [, rank] of rankMap) {
+    tieCount.set(rank, (tieCount.get(rank) ?? 0) + 1);
+  }
+
+  // Build list items for highlighted products, sorted by rank (best first)
+  const hlItems = sorted
+    .filter((item) => highlights.has(item.product_id) && rankMap.has(item.product_id))
+    .map((item) => ({ item, rank: rankMap.get(item.product_id)! }))
+    .sort((a, b) => a.rank - b.rank);
+
+  const fmtPct = (v: number) => (((v - 1) / totalValid) * 100).toFixed(1).replace(/\.0$/, '');
+
+  const items: string[] = [];
+  for (const { item, rank } of hlItems) {
+    const ties = tieCount.get(rank) ?? 1;
+    const pctMin = fmtPct(rank);
+    const pctMax = fmtPct(rank + ties - 1);
+    const pct = ties > 1 ? `${pctMin}~${pctMax}` : pctMin;
+    const color = highlights.get(item.product_id)!;
+    const rankText = t('ranking.format')
+      .replace('{rank}', String(rank))
+      .replace('{total}', String(totalValid))
+      .replace('{pct}', pct);
+    items.push(
+      `<li><span class="ranking-list-dot" style="background:${color}"></span>${productLabel(item)}：${rankText}</li>`,
+    );
+  }
+
+  listEl.innerHTML = `<ul>${items.join('')}</ul>`;
+}
+
 /* ── Lazy-rendering section factory ── */
 
 /**
@@ -514,6 +588,7 @@ export function createRankingSection(
   allProducts: Record<string, unknown>[],
   highlights: Map<string, string>,
   sectionTitle: string,
+  selfProductId?: string,
 ): HTMLElement {
   const section = document.createElement('div');
   section.className = 'card';
@@ -539,15 +614,27 @@ export function createRankingSection(
   if (eligibleAxes.length === 0) return section; // empty, caller can skip
 
   // Create placeholder containers
-  const plotContainers: { el: HTMLElement; axis: AxisDef; rendered: boolean }[] = [];
+  const plotContainers: { el: HTMLElement; axis: AxisDef; listEl: HTMLElement; rendered: boolean }[] = [];
 
   for (const axis of eligibleAxes) {
+    // Title: axis label
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ranking-bar-title';
+    titleEl.textContent = getAxisLabel(axis);
+    body.appendChild(titleEl);
+
     const wrapper = document.createElement('div');
     wrapper.className = 'ranking-bar-wrapper';
-    wrapper.style.marginBottom = '0.75rem';
+    wrapper.style.marginBottom = '0';
     wrapper.style.minHeight = '250px';
     body.appendChild(wrapper);
-    plotContainers.push({ el: wrapper, axis, rendered: false });
+
+    // Ranking list placeholder (populated on render)
+    const listEl = document.createElement('div');
+    listEl.className = 'ranking-bar-list';
+    body.appendChild(listEl);
+
+    plotContainers.push({ el: wrapper, axis, listEl, rendered: false });
   }
 
   section.appendChild(body);
@@ -567,7 +654,12 @@ export function createRankingSection(
           axis: container.axis,
           data,
           highlights,
+          selfProductId,
         });
+
+        // Populate ranking list for highlighted products
+        populateRankingList(container.listEl, data, container.axis, highlights);
+
         container.rendered = true;
         observer.unobserve(container.el);
       }

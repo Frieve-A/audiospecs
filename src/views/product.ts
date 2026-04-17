@@ -407,10 +407,16 @@ export async function renderProduct(
       </div>
     </div>
     <div id="product-ranking-section"></div>
+    <div class="product-actions product-actions-bottom">
+      <button id="product-add-compare-bottom">+ ${escHtml(t('product.add_to_compare'))}</button>
+      <a href="${googleUrl}" target="_blank" rel="noopener" class="product-search-link">${googleSvg} ${escHtml(t('analysis.ctx.search_google'))}</a>
+      ${frieveLinkHtml}
+      <a href="${amazonUrl}" target="_blank" rel="noopener" class="product-search-link">${amazonSvg} ${escHtml(t('analysis.ctx.search_amazon'))}</a>
+    </div>
   `;
 
-  // ── Add to compare button ──
-  document.getElementById('product-add-compare')!.addEventListener('click', () => {
+  // ── Add to compare buttons (top + bottom) ──
+  const addToCompare = () => {
     let ids: string[] = [];
     try { ids = JSON.parse(sessionStorage.getItem('compare_ids') || '[]'); } catch { /* empty */ }
     if (!ids.includes(pid)) {
@@ -419,7 +425,9 @@ export async function renderProduct(
       sessionStorage.setItem('compare_ids', JSON.stringify(ids));
     }
     navigate('compare', { ids: ids.join(',') });
-  });
+  };
+  document.getElementById('product-add-compare')!.addEventListener('click', addToCompare);
+  document.getElementById('product-add-compare-bottom')!.addEventListener('click', addToCompare);
 
   // ── Review widget postMessage height adjustment ──
   if (reviewRef) {
@@ -635,6 +643,7 @@ export async function renderProduct(
       categoryProducts,
       highlights,
       t('product.rankings'),
+      pid,
     );
   }
 }

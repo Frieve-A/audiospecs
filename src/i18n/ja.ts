@@ -337,6 +337,7 @@ export const ja: Record<string, string> = {
   'product.add_to_compare': '比較に追加',
   'product.specifications': 'スペック',
   'product.rankings': 'ランキング',
+  'ranking.format': '{total}製品中{rank}位（上位{pct}%）',
   'product.review': 'レビュー',
   'analysis.ctx.details': '製品詳細ページを開く',
 

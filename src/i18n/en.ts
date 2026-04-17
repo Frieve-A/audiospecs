@@ -337,6 +337,7 @@ export const en: Record<string, string> = {
   'product.add_to_compare': 'Add to Compare',
   'product.specifications': 'Specifications',
   'product.rankings': 'Rankings',
+  'ranking.format': '#{rank} of {total} (top {pct}%)',
   'product.review': 'Review',
   'analysis.ctx.details': 'Open product detail page',
 

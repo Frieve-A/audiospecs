@@ -3,6 +3,7 @@ import { query } from '../db/database';
 import { getCategoryLabel, getScaleForField, computeBarPercent, getAxis, productDisplayName } from '../presets';
 import { t, getLocale, tAxis } from '../i18n';
 import { showSourceMenu, dismissSourceMenu, setupSourceMenuDismiss, fetchAllSourceUrls, fetchSourceUrls } from '../sources';
+import { slugify } from './product';
 import { setupColHelpTooltips } from '../components/col-help';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { attachClearable } from '../components/clearable-input';
@@ -80,7 +81,6 @@ function getCompareFields() {
   return [
     { key: 'category_primary', labelKey: 'compare.field.category', format: (v: unknown) => getCategoryLabel(v as string) },
     { key: 'price_anchor_usd', labelKey: 'compare.field.price', format: (v: unknown) => v != null ? Math.round(Number(v)).toLocaleString() : '—' },
-    { key: 'release_year', labelKey: 'compare.field.year', format: (v: unknown) => v ?? '—' },
     { key: 'sinad_db', labelKey: 'compare.field.sinad', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'sinad_db_measured', labelKey: 'compare.field.sinad_measured', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
     { key: 'sinad_db_spec', labelKey: 'compare.field.sinad_spec', format: (v: unknown) => v != null ? sig3(Number(v)) : '—' },
@@ -381,12 +381,17 @@ export async function renderCompare(
         <div class="card-body compare-scroll">
           <div class="compare-grid" style="grid-template-columns: 180px repeat(${ordered.length}, minmax(160px, 1fr))">
             <div class="compare-header compare-corner"></div>
-            ${ordered.map((r) => `
+            ${ordered.map((r) => {
+              const _brand = String(r.brand_label || 'unknown');
+              const _prodName = productDisplayName(r as unknown as { product_name: string; variant?: string });
+              const _href = `/product/${slugify(_brand)}/${slugify(String(r.product_name || ''))}`;
+              return `
               <div class="compare-header">
-                ${r.brand_label} ${productDisplayName(r as unknown as { product_name: string; variant?: string })}
+                <a href="${_href}" class="compare-product-link" title="${escHtml(t('analysis.ctx.details'))}">${_brand} ${_prodName}</a>
                 <br/><button class="remove-compare" data-id="${r.product_id}" style="font-size:0.7rem;margin-top:0.25rem">${t('common.remove')}</button>
               </div>
-            `).join('')}
+            `;
+            }).join('')}
             ${compareFields.filter((f) => ordered.some((r) => r[f.key] != null)).map((f) => {
               const range = globalRange[f.key];
               const scale = getScaleForField(f.key);
@@ -703,6 +708,15 @@ export async function renderCompare(
         if (document.body.contains(cell)) cell.textContent = '—';
       });
     }
+
+    // SPA navigation for product links in headers
+    contentEl.querySelectorAll<HTMLAnchorElement>('.compare-product-link').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        history.pushState(null, '', a.getAttribute('href')!);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+    });
 
     contentEl.querySelectorAll('.remove-compare').forEach((btn) => {
       btn.addEventListener('click', () => {
