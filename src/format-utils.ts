@@ -23,6 +23,20 @@ export function formatHz(v: number): string {
   return sig3(v);
 }
 
+/** Format frequency with unit: "300 Hz" or "3.15 kHz" (sig3). */
+export function formatHzUnit(v: number): string {
+  if (v >= 1000) return parseFloat((v / 1000).toPrecision(3)).toString() + ' kHz';
+  return sig3(v) + ' Hz';
+}
+
+/** Format dB with sign and sig3: "+3.86 dB", "-1.71 dB", "0 dB". */
+export function formatDbSigned(v: number): string {
+  const s = sig3(Math.abs(v));
+  if (v > 0) return '+' + s;
+  if (v < 0) return '-' + s;
+  return '0';
+}
+
 export function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

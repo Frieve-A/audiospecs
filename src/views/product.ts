@@ -13,10 +13,11 @@ import { t, getLocale } from '../i18n';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { setupColHelpTooltips } from '../components/col-help';
 import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls, fetchAllSourceUrls } from '../sources';
-import { getExtendedCompactFields, isCompactFieldVisible, escHtml as _escHtml, sig3 as _sig3, formatHz as _formatHz } from '../format-utils';
+import { getExtendedCompactFields, isCompactFieldVisible, escHtml as _escHtml, sig3 as _sig3, formatHz as _formatHz, formatHzUnit, formatDbSigned } from '../format-utils';
 import { chartColors } from '../theme';
 import { navigate } from '../router';
 import { getRankingAxes, buildRankingData, createRankingSection } from '../components/ranking-bar-widget';
+import { buildTargetTrace, rawToDeviation } from '../target-curves';
 
 /* ── Helpers (re-exported from format-utils) ── */
 
@@ -290,6 +291,8 @@ export async function renderProduct(
       <div class="card" style="margin-bottom:1rem">
         <div class="card-body">
           <h3 style="margin:0 0 0.5rem">${escHtml(t('compare.fr.title'))}</h3>
+          <span class="fr-toggles"><span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-target-cb" checked> ${escHtml(t('compare.fr.target_curve'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.target_curve_tip'))}">?</span></span>
+          <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-deviation-cb"> ${escHtml(t('compare.fr.deviation'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.deviation_tip'))}">?</span></span></span>
           <div id="product-fr-plot" style="width:100%;height:400px;overflow:hidden"></div>
           <div id="product-fr-sources" class="fr-sources-row" style="margin-top:0.5rem;font-size:13px;color:var(--text-secondary, #666)"></div>
         </div>
@@ -409,38 +412,34 @@ export async function renderProduct(
     );
     const fr = frRows.find((r) => r.series_type === 'raw') ?? frRows[0];
     if (fr) {
-      const points: [number, number][] = JSON.parse(fr.points_json);
-      const trace: Data = {
-        x: points.map((p) => p[0]),
-        y: points.map((p) => p[1]),
-        type: 'scatter',
-        mode: 'lines',
-        line: { color: '#7c3aed', width: 1.5 },
-        hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
-      };
+      const rawPoints: [number, number][] = JSON.parse(fr.points_json);
+      const devPoints = rawToDeviation(rawPoints, category);
+      const targetTrace = buildTargetTrace(category);
 
       const baseFontPx = 16;
       const currentFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize || `${baseFontPx}`);
       const fontScale = Number.isFinite(currentFontPx) ? currentFontPx / baseFontPx : 1.25;
 
       const cc = chartColors();
-      const layout: Partial<Layout> = {
+      const baseLayout: Partial<Layout> = {
         xaxis: {
           title: { text: t('compare.fr.xaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale },
           type: 'log',
+          hoverformat: '.3~s',
           gridcolor: cc.gridcolor,
           zerolinecolor: cc.zerolinecolor,
-        },
+        } as Partial<Layout>['xaxis'],
         yaxis: {
-          title: { text: t('compare.fr.yaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale },
+          tickformat: '+d',
           gridcolor: cc.gridcolor,
           zerolinecolor: cc.zerolinecolor,
-        },
+        } as Partial<Layout>['yaxis'],
         paper_bgcolor: cc.paper_bgcolor,
         plot_bgcolor: cc.plot_bgcolor,
         font: { family: 'Inter, sans-serif', size: 12 * fontScale, ...(cc.fontColor ? { color: cc.fontColor } : {}) },
         margin: { l: 60 * fontScale, r: 20 * fontScale, t: 10 * fontScale, b: 55 * fontScale },
-        showlegend: false,
+        showlegend: true,
+        legend: { orientation: 'h', y: -0.2, font: { size: 11 * fontScale } },
         hovermode: 'x unified',
       };
 
@@ -452,7 +451,70 @@ export async function renderProduct(
         toImageButtonOptions: { scale: 2 },
       };
 
-      await Plotly.react('product-fr-plot', [trace], layout, plotConfig);
+      const makeFrTrace = (pts: [number, number][], color: string, name: string): Data => ({
+        x: pts.map((p) => p[0]),
+        y: pts.map((p) => p[1]),
+        customdata: pts.map((p) => `${formatDbSigned(p[1])} dB`),
+        type: 'scatter',
+        mode: 'lines',
+        name,
+        line: { color, width: 1.5 },
+        hovertemplate: '%{fullData.name}: %{customdata}<extra></extra>',
+      });
+
+      const renderFrPlot = (showTarget: boolean, showDeviation: boolean) => {
+        const pts = showDeviation ? devPoints : rawPoints;
+        const productTrace = makeFrTrace(pts, '#7c3aed', `${brandLabel} ${productLabel}`);
+        const yTitle = showDeviation ? t('compare.fr.yaxis') : t('compare.fr.yaxis_abs');
+        const yRange: [number, number] = showDeviation ? [-12, 12] : [-24, 18];
+        const yDtick = showDeviation ? 3 : 6;
+        const layout = {
+          ...baseLayout,
+          yaxis: { ...baseLayout.yaxis, range: yRange, dtick: yDtick, title: { text: yTitle, font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale } },
+        };
+        if (showDeviation) {
+          const zeroTrace: Data = {
+            x: [rawPoints[0][0], rawPoints[rawPoints.length - 1][0]],
+            y: [0, 0],
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Target (0 dB)',
+            line: { color: 'rgba(150,150,150,0.5)', width: 2, dash: 'dot' },
+            hoverinfo: 'skip',
+            showlegend: true,
+          };
+          Plotly.react('product-fr-plot', [zeroTrace, productTrace], layout, plotConfig);
+        } else {
+          const traces = showTarget ? [productTrace, targetTrace] : [productTrace];
+          Plotly.react('product-fr-plot', traces, layout, plotConfig);
+        }
+      };
+
+      renderFrPlot(true, false);
+
+      // Rewrite unified hover header to show formatted frequency
+      const frPlotEl = document.getElementById('product-fr-plot');
+      if (frPlotEl) {
+        (frPlotEl as any).on('plotly_hover', (ev: any) => {
+          if (!ev?.points?.[0]) return;
+          requestAnimationFrame(() => {
+            const hdr = frPlotEl.querySelector('.hoverlayer .legend text');
+            if (hdr?.firstElementChild) hdr.firstElementChild.textContent = formatHzUnit(ev.points[0].x);
+          });
+        });
+      }
+
+      // Wire up toggles
+      const targetCb = container.querySelector<HTMLInputElement>('#product-fr-target-cb');
+      const devCb = container.querySelector<HTMLInputElement>('#product-fr-deviation-cb');
+      const updateFrPlot = () => {
+        const showDev = devCb?.checked ?? false;
+        const showTarget = targetCb?.checked ?? true;
+        if (targetCb) targetCb.disabled = showDev;
+        renderFrPlot(showTarget, showDev);
+      };
+      if (targetCb) targetCb.addEventListener('change', updateFrPlot);
+      if (devCb) devCb.addEventListener('change', updateFrPlot);
     }
 
     // FR source URLs

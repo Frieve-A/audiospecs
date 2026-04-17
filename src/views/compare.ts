@@ -7,9 +7,10 @@ import { setupColHelpTooltips } from '../components/col-help';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { attachClearable } from '../components/clearable-input';
 import { chartColors } from '../theme';
-import { sig3 as _sig3, formatHz as _formatHz, escHtml as _escHtml, getExtendedCompactFields, isCompactFieldVisible, type CompactField } from '../format-utils';
+import { sig3 as _sig3, formatHz as _formatHz, escHtml as _escHtml, getExtendedCompactFields, isCompactFieldVisible, type CompactField, formatHzUnit, formatDbSigned } from '../format-utils';
 import { getRankingAxes, createRankingSection } from '../components/ranking-bar-widget';
 import { setupViewportTable } from '../components/viewport-table';
+import { buildTargetTrace, getTargetCurveLabel, rawToDeviation } from '../target-curves';
 
 let cleanupDocListener: (() => void) | null = null;
 let cleanupViewportTable: (() => void) | null = null;
@@ -365,6 +366,8 @@ export async function renderCompare(
         <div class="card" style="margin-bottom:1rem">
           <div class="card-body">
             <h3 style="margin:0 0 0.5rem">${t('compare.fr.title')}</h3>
+            <span class="fr-toggles"><span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="compare-fr-target-cb" checked> ${_escHtml(t('compare.fr.target_curve'))}</label><span class="col-help" data-tooltip="${_escHtml(t('compare.fr.target_curve_tip'))}">?</span></span>
+            <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="compare-fr-deviation-cb"> ${_escHtml(t('compare.fr.deviation'))}</label><span class="col-help" data-tooltip="${_escHtml(t('compare.fr.deviation_tip'))}">?</span></span></span>
             <div id="compare-fr-plot" style="width:100%;height:400px"></div>
             <div id="compare-fr-sources" class="fr-sources-row" style="margin-top:0.5rem;font-size:13px;color:var(--text-secondary, #666)"></div>
           </div>
@@ -459,47 +462,60 @@ export async function renderCompare(
       );
 
       const TRACE_COLORS = ['#7c3aed', '#db2777', '#2563eb', '#059669', '#d97706'];
-      // Cycle through dash patterns after colors wrap, so the 6th+ trace
-      // is visually distinguishable from the 1st–5th.
       const TRACE_DASHES = ['solid', 'dot', 'dash', 'dashdot', 'longdash'] as const;
-      const traces: Data[] = [];
+
+      // Collect raw and deviation points per product
+      interface FrEntry { rawPts: [number, number][]; devPts: [number, number][]; name: string; colorIdx: number; dashIdx: number; }
+      const frEntries: FrEntry[] = [];
+      const frCategories = new Set<string>();
 
       for (let i = 0; i < ordered.length; i++) {
         const pid = ordered[i].product_id as string;
         const fr = frRows.find((r) => r.product_id === pid && r.series_type === 'raw')
           ?? frRows.find((r) => r.product_id === pid);
         if (!fr) continue;
-        const points: [number, number][] = JSON.parse(fr.points_json);
-        const dash = TRACE_DASHES[Math.floor(i / TRACE_COLORS.length) % TRACE_DASHES.length];
-        traces.push({
-          x: points.map((p) => p[0]),
-          y: points.map((p) => p[1]),
-          type: 'scatter',
-          mode: 'lines',
+        const cat = ordered[i].category_primary as string;
+        frCategories.add(cat);
+        const rawPts: [number, number][] = JSON.parse(fr.points_json);
+        const devPts = rawToDeviation(rawPts, cat);
+        frEntries.push({
+          rawPts,
+          devPts,
           name: `${ordered[i].brand_label} ${productDisplayName(ordered[i] as unknown as { product_name: string; variant?: string })}`,
-          line: { color: TRACE_COLORS[i % TRACE_COLORS.length], width: 1.5, dash },
-          hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
+          colorIdx: i % TRACE_COLORS.length,
+          dashIdx: Math.floor(i / TRACE_COLORS.length) % TRACE_DASHES.length,
         });
       }
 
-      if (traces.length > 0) {
+      // Build target curve traces (one per distinct category type)
+      const targetTraces: Data[] = [];
+      const addedTargets = new Set<string>();
+      for (const cat of frCategories) {
+        const label = getTargetCurveLabel(cat);
+        if (addedTargets.has(label)) continue;
+        addedTargets.add(label);
+        targetTraces.push(buildTargetTrace(cat));
+      }
+
+      if (frEntries.length > 0) {
         const baseFontPx = 16;
         const currentFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize || `${baseFontPx}`);
         const fontScale = Number.isFinite(currentFontPx) ? currentFontPx / baseFontPx : 1.25;
 
         const cc = chartColors();
-        const layout: Partial<Layout> = {
+        const baseLayout: Partial<Layout> = {
           xaxis: {
             title: { text: t('compare.fr.xaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale },
             type: 'log',
+            hoverformat: '.3~s',
             gridcolor: cc.gridcolor,
             zerolinecolor: cc.zerolinecolor,
-          },
+          } as Partial<Layout>['xaxis'],
           yaxis: {
-            title: { text: t('compare.fr.yaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale },
+            tickformat: '+d',
             gridcolor: cc.gridcolor,
             zerolinecolor: cc.zerolinecolor,
-          },
+          } as Partial<Layout>['yaxis'],
           paper_bgcolor: cc.paper_bgcolor,
           plot_bgcolor: cc.plot_bgcolor,
           font: { family: 'Inter, sans-serif', size: 12 * fontScale, ...(cc.fontColor ? { color: cc.fontColor } : {}) },
@@ -520,24 +536,87 @@ export async function renderCompare(
           toImageButtonOptions: { scale: 2 },
         };
 
-        await Plotly.react('compare-fr-plot', traces, layout, plotConfig);
+        const renderCompareFr = (showTarget: boolean, showDeviation: boolean) => {
+          const productTraces: Data[] = frEntries.map((e) => {
+            const pts = showDeviation ? e.devPts : e.rawPts;
+            return {
+              x: pts.map((p) => p[0]),
+              y: pts.map((p) => p[1]),
+              customdata: pts.map((p) => `${formatDbSigned(p[1])} dB`),
+              type: 'scatter' as const,
+              mode: 'lines' as const,
+              name: e.name,
+              line: { color: TRACE_COLORS[e.colorIdx], width: 1.5, dash: TRACE_DASHES[e.dashIdx] },
+              hovertemplate: '%{fullData.name}: %{customdata}<extra></extra>',
+            };
+          });
+          const yTitle = showDeviation ? t('compare.fr.yaxis') : t('compare.fr.yaxis_abs');
+          const yRange: [number, number] = showDeviation ? [-12, 12] : [-24, 18];
+          const yDtick = showDeviation ? 3 : 6;
+          const layout = {
+            ...baseLayout,
+            yaxis: { ...baseLayout.yaxis, range: yRange, dtick: yDtick, title: { text: yTitle, font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale } },
+          };
 
-        // Emphasize the hovered legend item by thickening its trace line.
-        // plotly_legendhover doesn't reliably fire here, so attach DOM
-        // listeners directly to the legend item elements rendered by Plotly.
+          let allTraces: Data[];
+          if (showDeviation) {
+            const first = frEntries[0].rawPts;
+            const zeroTrace: Data = {
+              x: [first[0][0], first[first.length - 1][0]],
+              y: [0, 0],
+              type: 'scatter',
+              mode: 'lines',
+              name: 'Target (0 dB)',
+              line: { color: 'rgba(150,150,150,0.5)', width: 2, dash: 'dot' },
+              hoverinfo: 'skip',
+              showlegend: true,
+            };
+            allTraces = [zeroTrace, ...productTraces];
+          } else {
+            allTraces = showTarget ? [...productTraces, ...targetTraces] : [...productTraces];
+          }
+          Plotly.react('compare-fr-plot', allTraces, layout, plotConfig);
+        };
+
+        renderCompareFr(true, false);
+
+        // Wire up toggles
+        const targetCb = contentEl.querySelector<HTMLInputElement>('#compare-fr-target-cb');
+        const devCb = contentEl.querySelector<HTMLInputElement>('#compare-fr-deviation-cb');
+        const updateCompareFr = () => {
+          const showDev = devCb?.checked ?? false;
+          const showTarget = targetCb?.checked ?? true;
+          if (targetCb) targetCb.disabled = showDev;
+          renderCompareFr(showTarget, showDev);
+        };
+        if (targetCb) targetCb.addEventListener('change', updateCompareFr);
+        if (devCb) devCb.addEventListener('change', updateCompareFr);
+
+        // Rewrite unified hover header to show formatted frequency
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const gd = document.getElementById('compare-fr-plot') as any;
+        if (gd) {
+          gd.on('plotly_hover', (ev: any) => {
+            if (!ev?.points?.[0]) return;
+            requestAnimationFrame(() => {
+              const hdr = gd.querySelector('.hoverlayer .legend text');
+              if (hdr?.firstElementChild) hdr.firstElementChild.textContent = formatHzUnit(ev.points[0].x);
+            });
+          });
+        }
+
+        // Emphasize the hovered legend item by thickening its trace line.
         if (gd) {
           const BASE_WIDTH = 1.5;
           const HOVER_WIDTH = 4;
           const setHover = (idx: number | null) => {
-            const widths = gd.data.map((_: unknown, i: number) =>
-              i === idx ? HOVER_WIDTH : BASE_WIDTH,
-            );
+            const widths = gd.data.map((_: unknown, i: number) => {
+              // First trace may be target/zero — skip it for hover logic
+              if (i === 0 && gd.data[0]?.line?.dash === 'dot') return 2;
+              return i === idx ? HOVER_WIDTH : BASE_WIDTH;
+            });
             (Plotly as any).restyle(gd, { 'line.width': widths });
           };
-          // Plotly renders each legend entry as a <g class="traces">. Wait a
-          // tick to make sure they exist after Plotly.react resolves.
           requestAnimationFrame(() => {
             const items = gd.querySelectorAll('g.legend g.traces');
             items.forEach((item: Element, idx: number) => {

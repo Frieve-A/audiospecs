@@ -320,8 +320,13 @@ export const en: Record<string, string> = {
   'compare.split_spec_measured': 'Show spec & measured separately',
   'compare.fr.title': 'Frequency Response',
   'compare.fr.yaxis': 'Deviation (dB)',
+  'compare.fr.yaxis_abs': 'Level (dB)',
   'compare.fr.xaxis': 'Frequency (Hz)',
   'compare.fr.sources': 'Sources',
+  'compare.fr.target_curve': 'Target Curve',
+  'compare.fr.target_curve_tip': 'Overlay the Harman target curve used as the reference for FR deviation. Over-ear products use Harman OE 2018; IEMs use Harman IE 2019.',
+  'compare.fr.deviation': 'Deviation',
+  'compare.fr.deviation_tip': 'Switch to deviation view: each product\'s FR minus the Harman target curve. The target becomes a flat 0 dB reference line.',
 
   // Product detail page
   'page.title.product': 'Product — Frieve - AudioSpecs',

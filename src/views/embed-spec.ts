@@ -12,7 +12,8 @@ import { t } from '../i18n';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { setupColHelpTooltips } from '../components/col-help';
 import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls } from '../sources';
-import { getExtendedCompactFields, isCompactFieldVisible } from '../format-utils';
+import { getExtendedCompactFields, isCompactFieldVisible, formatHzUnit, formatDbSigned } from '../format-utils';
+import { buildTargetTrace } from '../target-curves';
 
 /* ── Theme helper for chart colors ── */
 
@@ -369,33 +370,41 @@ export async function renderEmbedSpec(
     const fr = frRows.find((r) => r.series_type === 'raw') ?? frRows[0];
     if (fr) {
       const points: [number, number][] = JSON.parse(fr.points_json);
-      const trace: Data = {
+      const productTrace: Data = {
         x: points.map((p) => p[0]),
         y: points.map((p) => p[1]),
+        customdata: points.map((p) => `${formatDbSigned(p[1])} dB`),
         type: 'scatter',
         mode: 'lines',
+        name: `${brandLabel} ${productLabel}`,
         line: { color: '#7c3aed', width: 1.5 },
-        hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
+        hovertemplate: '%{fullData.name}: %{customdata}<extra></extra>',
       };
+      const targetTrace = buildTargetTrace(category);
 
       const cc = embedChartColors();
       const layout: Partial<Layout> = {
         xaxis: {
           title: { text: t('compare.fr.xaxis'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
           type: 'log',
+          hoverformat: '.3~s',
           gridcolor: cc.gridcolor,
           zerolinecolor: cc.zerolinecolor,
-        },
+        } as Partial<Layout>['xaxis'],
         yaxis: {
-          title: { text: t('compare.fr.yaxis'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
+          title: { text: t('compare.fr.yaxis_abs'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
+          range: [-24, 18] as [number, number],
+          dtick: 6,
+          tickformat: '+d',
           gridcolor: cc.gridcolor,
           zerolinecolor: cc.zerolinecolor,
-        },
+        } as Partial<Layout>['yaxis'],
         paper_bgcolor: cc.paper_bgcolor,
         plot_bgcolor: cc.plot_bgcolor,
         font: { family: 'sans-serif', size: 11, ...(cc.fontColor ? { color: cc.fontColor } : {}) },
         margin: { l: 50, r: 16, t: 8, b: 45 },
-        showlegend: false,
+        showlegend: true,
+        legend: { orientation: 'h', y: -0.25, font: { size: 10 } },
         hovermode: 'x unified',
       };
 
@@ -405,7 +414,19 @@ export async function renderEmbedSpec(
         staticPlot: false,
       };
 
-      await Plotly.react('embed-fr-plot', [trace], layout, plotConfig);
+      await Plotly.react('embed-fr-plot', [productTrace, targetTrace], layout, plotConfig);
+
+      // Rewrite unified hover header to show formatted frequency
+      const embedPlotEl = document.getElementById('embed-fr-plot');
+      if (embedPlotEl) {
+        (embedPlotEl as any).on('plotly_hover', (ev: any) => {
+          if (!ev?.points?.[0]) return;
+          requestAnimationFrame(() => {
+            const hdr = embedPlotEl.querySelector('.hoverlayer .legend text');
+            if (hdr?.firstElementChild) hdr.firstElementChild.textContent = formatHzUnit(ev.points[0].x);
+          });
+        });
+      }
     }
 
     // Populate FR source URLs

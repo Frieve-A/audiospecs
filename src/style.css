@@ -1716,6 +1716,35 @@ table.data-table .numeric {
   text-decoration: underline;
 }
 
+.fr-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 0.25rem;
+}
+.fr-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+}
+.fr-target-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  user-select: none;
+}
+.fr-target-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+.fr-target-toggle input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .fr-sources-row {
   line-height: 1.6;
 }
