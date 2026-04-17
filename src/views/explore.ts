@@ -35,11 +35,16 @@ const DEFAULT_SORT = 'price_anchor_usd';
 const FIXED_COLUMNS = [
   { key: 'brand_label', labelKey: 'explore.col.brand', numeric: false },
   { key: 'product_name', labelKey: 'explore.col.product', numeric: false },
-  { key: 'category_primary', labelKey: 'explore.col.category', numeric: false },
 ];
+
+/** The category column — toggleable via the column selector */
+const CATEGORY_COLUMN = { key: 'category_primary', labelKey: 'explore.col.category', numeric: false };
 
 // Only brand and product columns are fixed (category scrolls with the table).
 const FIXED_COLUMN_KEYS = new Set(['brand_label', 'product_name']);
+
+/** Special non-numeric column keys that can appear in state.columns */
+const SPECIAL_COLUMN_KEYS = new Set(['category_primary']);
 
 /** All selectable numeric columns — derived from AXES */
 const ALL_NUMERIC_COLUMNS = AXES.map((a) => ({
@@ -58,7 +63,7 @@ const COL_GROUP_ORDER: ColGroupId[] = [
 ];
 
 function getColGroup(key: string): ColGroupId {
-  if (/^(price_anchor_usd|msrp_usd|release_year)$/.test(key)) return 'price_time';
+  if (/^(price_anchor_usd|msrp_usd|release_year|category_primary)$/.test(key)) return 'price_time';
   if (/^(sinad_db|snr_db|thd_percent|dynamic_range_db|crosstalk_db|freq_(low|high)_hz)/.test(key)) return 'audio_quality';
   if (/^(impedance_ohm|sensitivity_|driveability_|driver_total_count|driver_size_max_mm)/.test(key)) return 'transducer';
   if (/^(fr_harman_|preference_score)/.test(key)) return 'fr_rating';
@@ -70,15 +75,68 @@ function getColGroup(key: string): ColGroupId {
 
 /** Default numeric column keys (matches original display) */
 const DEFAULT_NUMERIC_KEYS = [
-  'price_anchor_usd', 'release_year', 'sinad_db', 'snr_db',
+  'category_primary', 'price_anchor_usd', 'release_year', 'sinad_db', 'snr_db',
   'freq_low_hz', 'freq_high_hz',
 ];
 
-/** Build active COLUMN_KEYS from selected numeric keys */
-function buildColumnKeys(numericKeys: string[]) {
-  const numSet = new Set(numericKeys);
-  const numCols = ALL_NUMERIC_COLUMNS.filter((c) => numSet.has(c.key));
-  return [...FIXED_COLUMNS, ...numCols];
+/** Category preset definitions: each maps a category to its key columns */
+interface CategoryPreset {
+  id: string;
+  category: string;
+  columns: string[];
+  sort: string;
+  sortDir: 'asc' | 'desc';
+}
+
+const CATEGORY_PRESETS: CategoryPreset[] = [
+  {
+    id: 'headphone',
+    category: 'headphone',
+    columns: ['price_anchor_usd', 'release_year', 'fr_harman_std_db', 'sensitivity_db_per_mw', 'impedance_ohm', 'weight_g'],
+    sort: 'fr_harman_std_db', sortDir: 'asc',
+  },
+  {
+    id: 'iem',
+    category: 'iem',
+    columns: ['price_anchor_usd', 'release_year', 'fr_harman_std_db', 'sensitivity_db_per_mw', 'impedance_ohm'],
+    sort: 'fr_harman_std_db', sortDir: 'asc',
+  },
+  {
+    id: 'dac',
+    category: 'dac',
+    columns: ['price_anchor_usd', 'release_year', 'sinad_db', 'snr_db', 'thd_percent', 'dynamic_range_db', 'dac_sample_rate_max_khz'],
+    sort: 'sinad_db', sortDir: 'desc',
+  },
+  {
+    id: 'headphone_amp',
+    category: 'headphone_amp',
+    columns: ['price_anchor_usd', 'release_year', 'sinad_db', 'amp_power_mw_32ohm', 'amp_output_impedance_ohm', 'amp_voltage_vrms'],
+    sort: 'sinad_db', sortDir: 'desc',
+  },
+  {
+    id: 'speaker',
+    category: 'speaker',
+    columns: ['price_anchor_usd', 'release_year', 'preference_score', 'impedance_ohm', 'freq_low_hz'],
+    sort: 'preference_score', sortDir: 'desc',
+  },
+  {
+    id: 'speaker_amp',
+    category: 'speaker_amp',
+    columns: ['price_anchor_usd', 'release_year', 'sinad_db', 'amp_power_w'],
+    sort: 'sinad_db', sortDir: 'desc',
+  },
+];
+
+/** Build active COLUMN_KEYS from selected keys (may include category_primary) */
+function buildColumnKeys(selectedKeys: string[]) {
+  const keySet = new Set(selectedKeys);
+  const showCategory = keySet.has('category_primary');
+  const numCols = ALL_NUMERIC_COLUMNS.filter((c) => keySet.has(c.key));
+  return [
+    ...FIXED_COLUMNS,
+    ...(showCategory ? [CATEGORY_COLUMN] : []),
+    ...numCols,
+  ];
 }
 
 const EXPLORE_STORAGE_KEY = 'explore_state';
@@ -145,20 +203,24 @@ export async function renderExplore(
     }
   }
   const AVAILABLE_NUMERIC_COLUMNS = ALL_NUMERIC_COLUMNS.filter((c) => availableNumericIds.has(c.key));
-  const DEFAULT_NUMERIC_KEYS_AVAILABLE = DEFAULT_NUMERIC_KEYS.filter((k) => availableNumericIds.has(k));
+  const DEFAULT_NUMERIC_KEYS_AVAILABLE = DEFAULT_NUMERIC_KEYS.filter((k) => availableNumericIds.has(k) || SPECIAL_COLUMN_KEYS.has(k));
 
   // Parse columns from URL or session. An empty selection is a valid,
   // intentional state — distinct from "not set". The URL uses the sentinel
   // "none" for an explicit empty selection so it survives a round-trip.
+  function isValidColumnKey(k: string): boolean {
+    return availableNumericIds.has(k) || SPECIAL_COLUMN_KEYS.has(k);
+  }
+
   function parseColumns(raw: string | null | undefined): string[] | null {
     if (raw == null) return null;
     if (raw === '' || raw === 'none') return [];
-    return raw.split(',').filter((k) => availableNumericIds.has(k));
+    return raw.split(',').filter(isValidColumnKey);
   }
 
   const urlCols = parseColumns(params.get('cols'));
   const storedCols = Array.isArray(stored.columns)
-    ? stored.columns.filter((k) => availableNumericIds.has(k))
+    ? stored.columns.filter(isValidColumnKey)
     : null;
 
   const initialColumns: string[] =
@@ -217,14 +279,18 @@ export async function renderExplore(
         <div id="explore-text-filters"></div>
       </div>
     </div>
+    <div id="explore-cat-presets" class="preset-bar" style="margin-top:0.75rem"></div>
     <div class="column-selector" id="explore-col-selector">
       <button class="column-selector-toggle" id="explore-col-toggle">
         ${t('explore.label.columns')} <span class="column-selector-arrow">▸</span>
       </button>
       <div class="column-selector-panel" id="explore-col-panel" hidden>
         ${(() => {
-          const grouped = new Map<ColGroupId, typeof AVAILABLE_NUMERIC_COLUMNS>();
-          for (const col of AVAILABLE_NUMERIC_COLUMNS) {
+          // Include category_primary as a selectable column in the price_time group
+          const catEntry = { key: 'category_primary', labelKey: 'explore.col.category', numeric: false, source: '' };
+          const allSelectableCols = [...AVAILABLE_NUMERIC_COLUMNS, catEntry];
+          const grouped = new Map<ColGroupId, typeof allSelectableCols>();
+          for (const col of allSelectableCols) {
             const g = getColGroup(col.key);
             if (!grouped.has(g)) grouped.set(g, []);
             grouped.get(g)!.push(col);
@@ -236,12 +302,14 @@ export async function renderExplore(
               <div class="column-selector-group-label">${t(`explore.colgroup.${g}`)}</div>
               <div class="column-selector-list">
                 ${cols.map((col) => {
-                  const desc = t(`axisdesc.${col.key}`);
+                  const isSpecial = SPECIAL_COLUMN_KEYS.has(col.key);
+                  const label = isSpecial ? t(col.labelKey) : tAxis(col.key);
+                  const desc = isSpecial ? '' : t(`axisdesc.${col.key}`);
                   const helpIcon = desc ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
                   return `
                   <label class="column-selector-item">
                     <input type="checkbox" value="${col.key}" ${colSelectionSet.has(col.key) ? 'checked' : ''} />
-                    ${tAxis(col.key)}${helpIcon}
+                    ${label}${helpIcon}
                   </label>`;
                 }).join('')}
               </div>
@@ -357,13 +425,14 @@ export async function renderExplore(
     // `.column-selector-item { display: flex }` overrides `[hidden]`.
     colPanel.querySelectorAll<HTMLLabelElement>('.column-selector-item').forEach((label) => {
       const cb = label.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      if (SPECIAL_COLUMN_KEYS.has(cb.value)) return; // always available
       const avail = filteredAvailableIds.has(cb.value);
       label.style.display = avail ? '' : 'none';
       if (!avail && cb.checked) cb.checked = false;
     });
 
-    // Drop unavailable columns from state.
-    state.columns = state.columns.filter((k) => filteredAvailableIds.has(k));
+    // Drop unavailable columns from state (preserve special columns like category_primary).
+    state.columns = state.columns.filter((k) => filteredAvailableIds.has(k) || SPECIAL_COLUMN_KEYS.has(k));
 
     // If current sort targets an unavailable column, fall back to default.
     if (state.sort !== 'brand_label' && !filteredAvailableIds.has(state.sort)) {
@@ -442,7 +511,8 @@ export async function renderExplore(
         p.product_id,
         CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
         ${PRODUCT_NAME_EXPR} as product_name,
-        p.category_primary${numericSelectClause}
+        p.category_primary,
+        p.review_url_frieve_audio_review${numericSelectClause}
       FROM web_product_core p
       ${where}
       ORDER BY ${sortExpr} IS NULL, ${sortExpr} ${state.sortDir}
@@ -485,10 +555,10 @@ export async function renderExplore(
               <button class="search-google" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Google">
                 <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
               </button>
-              <button class="search-frieve" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Frieve - Audio Review">🎧</button>
               <button class="search-amazon" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Amazon [PR]">
                 <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M6.61 11.802c0-1.005.247-1.863.743-2.577.495-.71 1.17-1.25 2.04-1.615.796-.335 1.756-.575 2.912-.72.39-.046 1.033-.103 1.92-.174v-.37c0-.93-.105-1.558-.3-1.875-.302-.43-.78-.65-1.44-.65h-.182c-.48.046-.896.196-1.246.46-.35.27-.575.63-.675 1.096-.06.3-.206.465-.435.51l-2.52-.315c-.248-.06-.372-.18-.372-.39 0-.046.007-.09.022-.15.247-1.29.855-2.25 1.82-2.88.976-.616 2.1-.975 3.39-1.05h.54c1.65 0 2.957.434 3.888 1.29.135.15.27.3.405.48.12.165.224.314.283.45.075.134.15.33.195.57.06.254.105.42.135.51.03.104.062.3.076.615.01.313.02.493.02.553v5.28c0 .376.06.72.165 1.036.105.313.21.54.315.674l.51.674c.09.136.136.256.136.36 0 .12-.06.226-.18.314-1.2 1.05-1.86 1.62-1.963 1.71-.165.135-.375.15-.63.045a6.062 6.062 0 01-.526-.496l-.31-.347a9.391 9.391 0 01-.317-.42l-.3-.435c-.81.886-1.603 1.44-2.4 1.665-.494.15-1.093.227-1.83.227-1.11 0-2.04-.343-2.76-1.034-.72-.69-1.08-1.665-1.08-2.94l-.05-.076zm3.753-.438c0 .566.14 1.02.425 1.364.285.34.675.512 1.155.512.045 0 .106-.007.195-.02.09-.016.134-.023.166-.023.614-.16 1.08-.553 1.424-1.178.165-.28.285-.58.36-.91.09-.32.12-.59.135-.8.015-.195.015-.54.015-1.005v-.54c-.84 0-1.484.06-1.92.18-1.275.36-1.92 1.17-1.92 2.43l-.035-.02z"/><path fill="#FF9900" d="M.045 18.02c.072-.116.187-.124.348-.022 3.636 2.11 7.594 3.166 11.87 3.166 2.852 0 5.668-.533 8.447-1.595l.315-.14c.138-.06.234-.1.293-.13.226-.088.39-.046.525.13.12.174.09.336-.12.48-.256.19-.6.41-1.006.654-1.244.743-2.64 1.316-4.185 1.726a17.617 17.617 0 01-10.951-.577 17.88 17.88 0 01-5.43-3.35c-.1-.074-.151-.15-.151-.22 0-.047.021-.09.051-.13z"/><path fill="#FF9900" d="M19.525 18.448c.03-.06.075-.11.132-.17.362-.243.714-.41 1.05-.5a8.094 8.094 0 011.612-.24c.14-.012.28 0 .41.03.65.06 1.05.168 1.172.33.063.09.099.228.099.39v.15c0 .51-.149 1.11-.424 1.8-.278.69-.664 1.248-1.156 1.68-.073.06-.14.09-.197.09-.03 0-.06 0-.09-.012-.09-.044-.107-.12-.064-.24.54-1.26.806-2.143.806-2.64 0-.15-.03-.27-.087-.344-.145-.166-.55-.257-1.224-.257-.243 0-.533.016-.87.046-.363.045-.7.09-1 .135-.09 0-.148-.014-.18-.044-.03-.03-.036-.047-.02-.077 0-.017.006-.03.02-.063v-.06z"/></svg>
               </button>
+              ${r.review_url_frieve_audio_review ? `<button class="search-frieve" data-ref="${escHtml(String(r.review_url_frieve_audio_review))}" title="${escHtml(t('analysis.ctx.open_frieve'))}">🎧</button>` : ''}
             </td>
           </tr>`,
           )
@@ -560,9 +630,11 @@ export async function renderExplore(
     tbodyEl.querySelectorAll('.search-frieve').forEach((btn) => {
       btn.addEventListener('click', () => {
         const el = btn as HTMLElement;
-        const q = `${el.dataset.brand} ${el.dataset.name}`.trim().split(/\s+/).map(encodeURIComponent).join('+');
-        const lang = getLocale() === 'ja' ? 'ja' : 'en';
-        window.open(`https://audioreview.frieve.com/search/${lang}/?q=${q}`, '_blank');
+        const ref = el.dataset.ref;
+        if (ref) {
+          const lang = getLocale() === 'ja' ? 'ja' : 'en';
+          window.open(`https://audioreview.frieve.com/products/${lang}/${encodeURIComponent(ref)}/`, '_blank');
+        }
       });
     });
     tbodyEl.querySelectorAll('.search-amazon').forEach((btn) => {
@@ -650,6 +722,7 @@ export async function renderExplore(
     state.page = 0;
     // Re-render filter panel for the new category
     await renderFilterPanel();
+    renderCategoryPresets();
     syncUrl();
     loadData();
   });
@@ -666,10 +739,14 @@ export async function renderExplore(
   // Column selector checkboxes
   colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
     cb.addEventListener('change', () => {
-      const checked = Array.from(colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked'))
-        .map((el) => el.value);
-      // Preserve order from ALL_NUMERIC_COLUMNS
-      state.columns = AVAILABLE_NUMERIC_COLUMNS.map((c) => c.key).filter((k) => checked.includes(k));
+      const checked = new Set(
+        Array.from(colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked'))
+          .map((el) => el.value),
+      );
+      // Build columns: special keys first (in order), then numeric keys (preserving AVAILABLE_NUMERIC_COLUMNS order)
+      const specialCols = [...SPECIAL_COLUMN_KEYS].filter((k) => checked.has(k));
+      const numericCols = AVAILABLE_NUMERIC_COLUMNS.map((c) => c.key).filter((k) => checked.has(k));
+      state.columns = [...specialCols, ...numericCols];
       // If sort column was removed, reset to default
       const activeCols = getActiveColumns();
       if (!activeCols.some((c) => c.key === state.sort)) {
@@ -677,6 +754,7 @@ export async function renderExplore(
         state.sortDir = 'desc';
       }
       state.page = 0;
+      renderCategoryPresets();
       syncUrl();
       loadData();
     });
@@ -699,6 +777,57 @@ export async function renderExplore(
 
   // Column selector help tooltips
   setupColHelpTooltips(colPanel, colPanel);
+
+  // ── Category presets ──
+  const catPresetsEl = document.getElementById('explore-cat-presets')!;
+
+  function getActiveCategoryPreset(): CategoryPreset | undefined {
+    const numericCols = state.columns.filter((k) => !SPECIAL_COLUMN_KEYS.has(k));
+    return CATEGORY_PRESETS.find(
+      (p) => p.category === state.category
+        && p.columns.length === numericCols.length
+        && p.columns.every((k, i) => k === numericCols[i]),
+    );
+  }
+
+  function renderCategoryPresets(): void {
+    // Only show presets for categories that exist in the DB
+    const visiblePresets = CATEGORY_PRESETS.filter((p) => allCategoryKeys.includes(p.category));
+    const activePreset = getActiveCategoryPreset();
+    catPresetsEl.innerHTML = visiblePresets.map((p) => `
+      <button class="preset-btn cat-preset-btn cat-${p.category} ${p.id === activePreset?.id ? 'active' : ''}"
+              data-preset="${p.id}">
+        ${getCategoryLabel(p.category)}
+      </button>
+    `).join('');
+
+    catPresetsEl.querySelectorAll<HTMLElement>('[data-preset]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const preset = CATEGORY_PRESETS.find((p) => p.id === btn.dataset.preset);
+        if (!preset) return;
+        // Set category
+        state.category = preset.category;
+        (document.getElementById('explore-cat') as HTMLSelectElement).value = preset.category;
+        // Set columns
+        state.columns = preset.columns.filter((k) => availableNumericIds.has(k));
+        // Update column checkboxes
+        const colSet = new Set(state.columns);
+        colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
+          cb.checked = colSet.has(cb.value);
+        });
+        // Apply preset sort
+        state.sort = preset.sort;
+        state.sortDir = preset.sortDir;
+        state.page = 0;
+        await renderFilterPanel();
+        renderCategoryPresets();
+        syncUrl();
+        loadData();
+      });
+    });
+  }
+
+  renderCategoryPresets();
 
   // ── Filter panel ──
   const filterToggleBtn = document.getElementById('explore-filter-toggle')!;
@@ -746,7 +875,7 @@ export async function renderExplore(
       updateFilterCount();
       syncUrl();
       loadData();
-    });
+    }, boolFilters);
     attachTextFilterListeners('explore-tf', state.filters, () => {
       state.page = 0;
       updateFilterCount();
@@ -847,6 +976,7 @@ export async function renderExplore(
       cb.checked = defaultSet.has(cb.value);
     });
     await renderFilterPanel();
+    renderCategoryPresets();
     syncUrl();
     loadData();
   });
@@ -935,6 +1065,8 @@ function formatUnitCasing(s: string): string {
   return s
     .replace(/\(Hz\)/g, '(<span class="unit-case">Hz</span>)')
     .replace(/\(kHz\)/g, '(<span class="unit-case">kHz</span>)')
+    .replace(/\(dB\/mW\)/g, '(<span class="unit-case">dB</span>/<span class="unit-case">mW</span>)')
+    .replace(/\(dB\/V\)/g, '(<span class="unit-case">dB</span>/V)')
     .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)')
     .replace(/\(g\)/g, '(<span class="unit-case">g</span>)')
     .replace(/\(mW/g, '(<span class="unit-case">mW</span>')

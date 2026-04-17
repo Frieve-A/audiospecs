@@ -14,7 +14,7 @@ import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from
 import { setupColHelpTooltips } from '../components/col-help';
 import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls, fetchAllSourceUrls } from '../sources';
 import { getExtendedCompactFields, isCompactFieldVisible, escHtml as _escHtml, sig3 as _sig3, formatHz as _formatHz, formatHzUnit, formatDbSigned } from '../format-utils';
-import { chartColors } from '../theme';
+import { chartColors, isDarkTheme } from '../theme';
 import { navigate } from '../router';
 import { getRankingAxes, buildRankingData, createRankingSection } from '../components/ranking-bar-widget';
 import { buildTargetTrace, rawToDeviation } from '../target-curves';
@@ -283,6 +283,29 @@ export async function renderProduct(
     }
   }
 
+  // ── Review widget (if review URL exists) ──
+  const reviewRef = row.review_url_frieve_audio_review as string | null;
+  let reviewHtml = '';
+  if (reviewRef) {
+    const widgetBase = import.meta.env.DEV
+      ? 'http://localhost:4000'
+      : 'https://audioreview.frieve.com';
+    const widgetTheme = isDarkTheme() ? 'dark' : 'light';
+    const widgetLang = getLocale() === 'ja' ? 'ja' : 'en';
+    const widgetSrc = `${widgetBase}/product_widget.html?ref=${encodeURIComponent(reviewRef)}&lang=${widgetLang}&theme=${widgetTheme}`;
+    reviewHtml = `
+      <div class="card" style="margin-bottom:1rem" id="product-review-card">
+        <div class="card-body">
+          <h3 style="margin:0 0 0.5rem">${escHtml(t('product.review'))}</h3>
+          <iframe id="ar-widget-${escHtml(reviewRef)}"
+                  src="${escHtml(widgetSrc)}"
+                  style="width:100%;border:none;overflow:hidden;"
+                  scrolling="no">
+          </iframe>
+        </div>
+      </div>`;
+  }
+
   // ── FR chart (if data exists) ──
   const hasFr = row.has_fr_data === 1;
   let frHtml = '';
@@ -339,8 +362,9 @@ export async function renderProduct(
   const searchQuery = `${brandLabel} ${row.product_name}`.trim();
   const lang = getLocale() === 'ja' ? 'ja' : 'en';
   const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-  const frieveQ = searchQuery.split(/\s+/).map(encodeURIComponent).join('+');
-  const frieveUrl = `https://audioreview.frieve.com/search/${lang}/?q=${frieveQ}`;
+  const frieveLinkHtml = reviewRef
+    ? `<a href="https://audioreview.frieve.com/products/${lang}/${encodeURIComponent(reviewRef)}/" target="_blank" rel="noopener" class="product-search-link">\u{1F3A7} ${escHtml(t('analysis.ctx.open_frieve'))}</a>`
+    : '';
   const amazonUrl = getLocale() === 'ja'
     ? `https://www.amazon.co.jp/s?k=${encodeURIComponent(searchQuery)}&tag=frieve02-22`
     : `https://www.amazon.com/s?k=${encodeURIComponent(searchQuery)}&tag=frieve-20`;
@@ -360,9 +384,10 @@ export async function renderProduct(
     <div class="product-actions">
       <button id="product-add-compare">+ ${escHtml(t('product.add_to_compare'))}</button>
       <a href="${googleUrl}" target="_blank" rel="noopener" class="product-search-link">${googleSvg} ${escHtml(t('analysis.ctx.search_google'))}</a>
-      <a href="${frieveUrl}" target="_blank" rel="noopener" class="product-search-link">\u{1F3A7} ${escHtml(t('analysis.ctx.search_frieve'))}</a>
+      ${frieveLinkHtml}
       <a href="${amazonUrl}" target="_blank" rel="noopener" class="product-search-link">${amazonSvg} ${escHtml(t('analysis.ctx.search_amazon'))}</a>
     </div>
+    ${reviewHtml}
     ${frHtml}
     <div class="card">
       <div class="card-body">
@@ -395,6 +420,25 @@ export async function renderProduct(
     }
     navigate('compare', { ids: ids.join(',') });
   });
+
+  // ── Review widget postMessage height adjustment ──
+  if (reviewRef) {
+    const handleWidgetMessage = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'frieve-audioreview-widget-resize' && e.data.ref) {
+        const iframe = container.querySelector<HTMLIFrameElement>(`#ar-widget-${CSS.escape(e.data.ref)}`);
+        const card = container.querySelector<HTMLElement>('#product-review-card');
+        if (iframe) {
+          if (e.data.height === 0) {
+            if (card) card.style.display = 'none';
+          } else {
+            if (card) card.style.display = '';
+            iframe.style.height = e.data.height + 'px';
+          }
+        }
+      }
+    };
+    window.addEventListener('message', handleWidgetMessage);
+  }
 
   // ── Tooltips ──
   setupColHelpTooltips(container);

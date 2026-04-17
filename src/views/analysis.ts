@@ -577,7 +577,7 @@ export async function renderAnalysis(
       updateAnalysisFilterCount();
       syncUrl();
       renderPlot();
-    });
+    }, allFilters);
 
     updateAnalysisFilterCount();
     analysisFilterSection.style.display = allFilters.length > 0 ? '' : 'none';
@@ -600,6 +600,7 @@ export async function renderAnalysis(
     source_type: string;
     x_src: string;
     y_src: string;
+    review_url_frieve_audio_review: string | null;
   };
   const _rowType: RowType = undefined as unknown as RowType;
 
@@ -716,7 +717,8 @@ export async function renderAnalysis(
         coalesce(p.street_price_usd, p.msrp_usd) as price_anchor_usd,
         ${xSrcLiteralExpr()},
         ${ySrcLiteralExpr(yOverride)},
-        ${sourceTypeExpr(yOverride)}
+        ${sourceTypeExpr(yOverride)},
+        p.review_url_frieve_audio_review
       FROM web_product_core p
       WHERE p.category_primary IN (${catPlaceholders})
         AND (${xSrc}) IS NOT NULL
@@ -1234,7 +1236,7 @@ export async function renderAnalysis(
       <button data-action="details">${t('analysis.ctx.details')}</button>
       <button data-action="compare">${t('analysis.ctx.add_compare')}</button>
       <button data-action="google">${t('analysis.ctx.search_google')}</button>
-      <button data-action="frieve">${t('analysis.ctx.search_frieve')}</button>
+      ${row.review_url_frieve_audio_review ? `<button data-action="frieve">${t('analysis.ctx.open_frieve')}</button>` : ''}
       <button data-action="amazon">${t('analysis.ctx.search_amazon')}</button>
     `;
     // Position: keep within viewport
@@ -1288,11 +1290,13 @@ export async function renderAnalysis(
       window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank');
     });
 
-    menu.querySelector('[data-action="frieve"]')!.addEventListener('click', () => {
+    menu.querySelector('[data-action="frieve"]')?.addEventListener('click', () => {
       dismissCtxMenu();
-      const q = searchQuery.split(/\s+/).map(encodeURIComponent).join('+');
-      const lang = getLocale() === 'ja' ? 'ja' : 'en';
-      window.open(`https://audioreview.frieve.com/search/${lang}/?q=${q}`, '_blank');
+      const ref = row.review_url_frieve_audio_review;
+      if (ref) {
+        const lang = getLocale() === 'ja' ? 'ja' : 'en';
+        window.open(`https://audioreview.frieve.com/products/${lang}/${encodeURIComponent(ref)}/`, '_blank');
+      }
     });
 
     menu.querySelector('[data-action="amazon"]')!.addEventListener('click', () => {

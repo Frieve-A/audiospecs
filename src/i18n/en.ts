@@ -124,6 +124,7 @@ export const en: Record<string, string> = {
   'analysis.ctx.search_google': 'Search on Google',
   'analysis.ctx.search_amazon': 'Search on Amazon [PR]',
   'analysis.ctx.search_frieve': 'Search on Frieve - Audio Review',
+  'analysis.ctx.open_frieve': 'Open on Frieve - Audio Review',
   'analysis.ctx.sources': 'Sources',
 
   // Explore
@@ -134,7 +135,7 @@ export const en: Record<string, string> = {
   'explore.label.category': 'Category',
   'explore.label.columns': 'Columns',
   'explore.columns.clear': 'Clear',
-  'explore.colgroup.price_time': 'Price / Time',
+  'explore.colgroup.price_time': 'Price / Time / Category',
   'explore.colgroup.audio_quality': 'Audio Quality',
   'explore.colgroup.transducer': 'Transducer',
   'explore.colgroup.fr_rating': 'Freq Response / Rating',
@@ -336,6 +337,7 @@ export const en: Record<string, string> = {
   'product.add_to_compare': 'Add to Compare',
   'product.specifications': 'Specifications',
   'product.rankings': 'Rankings',
+  'product.review': 'Review',
   'analysis.ctx.details': 'Open product detail page',
 
   // Embed widget

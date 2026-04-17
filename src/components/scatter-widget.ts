@@ -50,6 +50,7 @@ type RowType = {
   price_anchor_usd: number | null;
   x_src: string;
   y_src: string;
+  review_url_frieve_audio_review: string | null;
 };
 
 /**
@@ -130,7 +131,8 @@ export async function renderScatterWidget(
       ${srcExprFor(config.x)} as x_src,
       ${srcExprFor(config.y)} as y_src,
       p.brand_name_en,
-      coalesce(p.street_price_usd, p.msrp_usd) as price_anchor_usd
+      coalesce(p.street_price_usd, p.msrp_usd) as price_anchor_usd,
+      p.review_url_frieve_audio_review
     FROM web_product_core p
     WHERE p.category_primary IN (${catPlaceholders})
       AND x_val IS NOT NULL
@@ -412,7 +414,7 @@ export async function renderScatterWidget(
       <button data-action="details">${t('analysis.ctx.details')}</button>
       <button data-action="compare">${t('analysis.ctx.add_compare')}</button>
       <button data-action="google">${t('analysis.ctx.search_google')}</button>
-      <button data-action="frieve">${t('analysis.ctx.search_frieve')}</button>
+      ${row.review_url_frieve_audio_review ? `<button data-action="frieve">${t('analysis.ctx.open_frieve')}</button>` : ''}
       <button data-action="amazon">${t('analysis.ctx.search_amazon')}</button>
     `;
     menu.style.left = `${cx}px`;
@@ -455,11 +457,13 @@ export async function renderScatterWidget(
       window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank');
     });
 
-    menu.querySelector('[data-action="frieve"]')!.addEventListener('click', () => {
+    menu.querySelector('[data-action="frieve"]')?.addEventListener('click', () => {
       document.querySelector('.scatter-ctx-menu')?.remove();
-      const q = searchQuery.split(/\s+/).map(encodeURIComponent).join('+');
-      const lang = getLocale() === 'ja' ? 'ja' : 'en';
-      window.open(`https://audioreview.frieve.com/search/${lang}/?q=${q}`, '_blank');
+      const ref = row.review_url_frieve_audio_review;
+      if (ref) {
+        const lang = getLocale() === 'ja' ? 'ja' : 'en';
+        window.open(`https://audioreview.frieve.com/products/${lang}/${encodeURIComponent(ref)}/`, '_blank');
+      }
     });
 
     menu.querySelector('[data-action="amazon"]')!.addEventListener('click', () => {

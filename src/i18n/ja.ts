@@ -124,6 +124,7 @@ export const ja: Record<string, string> = {
   'analysis.ctx.search_google': 'Googleで検索',
   'analysis.ctx.search_amazon': 'Amazonで検索[PR]',
   'analysis.ctx.search_frieve': 'Frieve - Audio Reviewで検索',
+  'analysis.ctx.open_frieve': 'Frieve - Audio Reviewで開く',
   'analysis.ctx.sources': '出典',
 
   // Explore
@@ -134,7 +135,7 @@ export const ja: Record<string, string> = {
   'explore.label.category': 'カテゴリ',
   'explore.label.columns': '表示列',
   'explore.columns.clear': 'クリア',
-  'explore.colgroup.price_time': '価格・時期',
+  'explore.colgroup.price_time': '価格・時期・カテゴリ',
   'explore.colgroup.audio_quality': '音質指標',
   'explore.colgroup.transducer': 'トランスデューサー',
   'explore.colgroup.fr_rating': '周波数特性・評価',
@@ -336,6 +337,7 @@ export const ja: Record<string, string> = {
   'product.add_to_compare': '比較に追加',
   'product.specifications': 'スペック',
   'product.rankings': 'ランキング',
+  'product.review': 'レビュー',
   'analysis.ctx.details': '製品詳細ページを開く',
 
   // Embed widget

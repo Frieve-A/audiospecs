@@ -1,8 +1,8 @@
 /**
- * Reusable 3-state boolean filter component for Explore and Analysis views.
+ * Reusable 2-state boolean filter component for Explore and Analysis views.
  *
- * Each filter cycles: any → yes → no → any
- * Renders as a compact toggle button per boolean column.
+ * Each filter toggles: any ↔ yes
+ * Mutually-exclusive groups ensure only one filter in a group can be active.
  */
 
 import { t } from '../i18n';
@@ -16,6 +16,8 @@ export interface BoolFilterDef {
   column: string;
   labelKey: string;
   group: string;
+  /** Exclusive group key — only one filter in the same exclusive group can be active at a time. */
+  exclusive?: string;
 }
 
 export interface TextFilterDef {
@@ -31,11 +33,11 @@ const COMMON_FILTERS: BoolFilterDef[] = [
 ];
 
 const HEADPHONE_IEM_FILTERS: BoolFilterDef[] = [
-  { column: 'is_closed_back', labelKey: 'filter.is_closed_back', group: 'design' },
-  { column: 'is_open_back', labelKey: 'filter.is_open_back', group: 'design' },
-  { column: 'is_over_ear', labelKey: 'filter.is_over_ear', group: 'wearing' },
-  { column: 'is_on_ear', labelKey: 'filter.is_on_ear', group: 'wearing' },
-  { column: 'is_in_ear', labelKey: 'filter.is_in_ear', group: 'wearing' },
+  { column: 'is_closed_back', labelKey: 'filter.is_closed_back', group: 'design', exclusive: 'back_type' },
+  { column: 'is_open_back', labelKey: 'filter.is_open_back', group: 'design', exclusive: 'back_type' },
+  { column: 'is_over_ear', labelKey: 'filter.is_over_ear', group: 'wearing', exclusive: 'ear_type' },
+  { column: 'is_on_ear', labelKey: 'filter.is_on_ear', group: 'wearing', exclusive: 'ear_type' },
+  { column: 'is_in_ear', labelKey: 'filter.is_in_ear', group: 'wearing', exclusive: 'ear_type' },
   { column: 'cable_is_detachable', labelKey: 'filter.cable_is_detachable', group: 'cable' },
   { column: 'cable_socket_mmcx', labelKey: 'filter.cable_socket_mmcx', group: 'cable' },
   { column: 'cable_socket_2pin', labelKey: 'filter.cable_socket_2pin', group: 'cable' },
@@ -62,9 +64,9 @@ const DAC_FILTERS: BoolFilterDef[] = [
 
 const AMP_FILTERS: BoolFilterDef[] = [
   { column: 'amp_has_balanced_output', labelKey: 'filter.amp_has_balanced_output', group: 'amp' },
-  { column: 'amp_is_class_a', labelKey: 'filter.amp_is_class_a', group: 'amp' },
-  { column: 'amp_is_class_ab', labelKey: 'filter.amp_is_class_ab', group: 'amp' },
-  { column: 'amp_is_class_d', labelKey: 'filter.amp_is_class_d', group: 'amp' },
+  { column: 'amp_is_class_a', labelKey: 'filter.amp_is_class_a', group: 'amp', exclusive: 'amp_class' },
+  { column: 'amp_is_class_ab', labelKey: 'filter.amp_is_class_ab', group: 'amp', exclusive: 'amp_class' },
+  { column: 'amp_is_class_d', labelKey: 'filter.amp_is_class_d', group: 'amp', exclusive: 'amp_class' },
   { column: 'power_has_usb_power', labelKey: 'filter.power_has_usb_power', group: 'power' },
   { column: 'has_remote_control', labelKey: 'filter.has_remote_control', group: 'features' },
 ];
@@ -167,9 +169,7 @@ export function clearFilters(state: FilterPanelState): void {
 /* ── Render helpers ── */
 
 function nextBoolState(current: BoolFilterState): BoolFilterState {
-  if (current === 'any') return 'yes';
-  if (current === 'yes') return 'no';
-  return 'any';
+  return current === 'any' ? 'yes' : 'any';
 }
 
 function boolStateLabel(state: BoolFilterState): string {
@@ -251,14 +251,43 @@ export async function renderTextFilterDropdowns(
 /**
  * Attach event listeners to bool filter buttons.
  * onChange is called whenever any filter state changes.
+ * Pass filterDefs to enable mutual-exclusivity handling.
  */
 export function attachBoolFilterListeners(
   containerId: string,
   state: FilterPanelState,
   onChange: () => void,
+  filterDefs?: BoolFilterDef[],
 ): void {
   const container = document.getElementById(containerId);
   if (!container) return;
+
+  // Build exclusive-group lookup: column → [other columns in same exclusive group]
+  const exclusiveGroupMap = new Map<string, string[]>();
+  if (filterDefs) {
+    const groups = new Map<string, string[]>();
+    for (const def of filterDefs) {
+      if (def.exclusive) {
+        if (!groups.has(def.exclusive)) groups.set(def.exclusive, []);
+        groups.get(def.exclusive)!.push(def.column);
+      }
+    }
+    for (const members of groups.values()) {
+      for (const col of members) {
+        exclusiveGroupMap.set(col, members.filter((c) => c !== col));
+      }
+    }
+  }
+
+  /** Update a single button's visual state. */
+  function syncButtonUI(b: HTMLButtonElement, val: BoolFilterState): void {
+    b.dataset.state = val;
+    b.classList.toggle('bool-filter-active', val === 'yes');
+    b.classList.toggle('bool-filter-yes', val === 'yes');
+    b.querySelector('.bool-filter-state')!.textContent = val === 'yes' ? boolStateLabel(val) : '';
+    const colKey = b.dataset.col;
+    b.title = `${t(colKey ? `filter.${colKey}` : '')}: ${boolStateLabel(val)}`;
+  }
 
   container.querySelectorAll<HTMLButtonElement>('.bool-filter-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -270,13 +299,20 @@ export function attachBoolFilterListeners(
       } else {
         state.boolFilters[col] = next;
       }
-      // Update button appearance
-      btn.dataset.state = next;
-      btn.classList.toggle('bool-filter-active', next !== 'any');
-      btn.classList.toggle('bool-filter-yes', next === 'yes');
-      btn.classList.toggle('bool-filter-no', next === 'no');
-      btn.querySelector('.bool-filter-state')!.textContent = next !== 'any' ? boolStateLabel(next) : '';
-      btn.title = `${t(btn.dataset.col ? `filter.${btn.dataset.col}` : '')}: ${boolStateLabel(next)}`;
+      syncButtonUI(btn, next);
+
+      // Clear other members of the same exclusive group
+      if (next === 'yes') {
+        const siblings = exclusiveGroupMap.get(col);
+        if (siblings) {
+          for (const sib of siblings) {
+            delete state.boolFilters[sib];
+            const sibBtn = container.querySelector<HTMLButtonElement>(`.bool-filter-btn[data-col="${sib}"]`);
+            if (sibBtn) syncButtonUI(sibBtn, 'any');
+          }
+        }
+      }
+
       onChange();
     });
   });

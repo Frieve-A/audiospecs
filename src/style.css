@@ -719,7 +719,7 @@ nav.main-nav a.active {
   padding: 0.2rem 0.5rem;
   font-size: 0.75rem;
   font-family: var(--font-sans);
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   border-radius: 100px;
   background: var(--bg-primary);
   color: var(--text-secondary);
@@ -740,13 +740,6 @@ nav.main-nav a.active {
   font-weight: 500;
 }
 
-.bool-filter-btn.bool-filter-active.bool-filter-no {
-  background: var(--danger-bg, #fef2f2);
-  border-color: var(--danger, #ef4444);
-  color: var(--danger, #ef4444);
-  font-weight: 500;
-}
-
 .bool-filter-state {
   font-size: 0.65rem;
   font-weight: 600;
@@ -757,12 +750,6 @@ nav.main-nav a.active {
   background: rgba(59, 130, 246, 0.15);
   border-color: #60a5fa;
   color: #93bbfd;
-}
-
-[data-theme="dark"] .bool-filter-btn.bool-filter-active.bool-filter-no {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: #f87171;
-  color: #fca5a5;
 }
 
 /* ── Text filter panel ── */
@@ -1288,6 +1275,19 @@ table.data-table .numeric {
 .preset-btn.warn {
   opacity: 0.5;
 }
+
+.cat-preset-btn.cat-headphone { background: var(--chip-headphone-bg); color: var(--chip-headphone-text); border-color: var(--chip-headphone-border); }
+.cat-preset-btn.cat-iem { background: var(--chip-iem-bg); color: var(--chip-iem-text); border-color: var(--chip-iem-border); }
+.cat-preset-btn.cat-dac { background: var(--chip-dac-bg); color: var(--chip-dac-text); border-color: var(--chip-dac-border); }
+.cat-preset-btn.cat-headphone_amp { background: var(--chip-amp-bg); color: var(--chip-amp-text); border-color: var(--chip-amp-border); }
+.cat-preset-btn.cat-speaker { background: var(--chip-speaker-bg); color: var(--chip-speaker-text); border-color: var(--chip-speaker-border); }
+.cat-preset-btn.cat-speaker_amp { background: var(--chip-amp-bg); color: var(--chip-amp-text); border-color: var(--chip-amp-border); }
+.cat-preset-btn.cat-headphone.active { border-color: var(--chip-headphone-text); box-shadow: 0 0 0 1px var(--chip-headphone-text); }
+.cat-preset-btn.cat-iem.active { border-color: var(--chip-iem-text); box-shadow: 0 0 0 1px var(--chip-iem-text); }
+.cat-preset-btn.cat-dac.active { border-color: var(--chip-dac-text); box-shadow: 0 0 0 1px var(--chip-dac-text); }
+.cat-preset-btn.cat-headphone_amp.active { border-color: var(--chip-amp-text); box-shadow: 0 0 0 1px var(--chip-amp-text); }
+.cat-preset-btn.cat-speaker.active { border-color: var(--chip-speaker-text); box-shadow: 0 0 0 1px var(--chip-speaker-text); }
+.cat-preset-btn.cat-speaker_amp.active { border-color: var(--chip-amp-text); box-shadow: 0 0 0 1px var(--chip-amp-text); }
 
 .mode-btn {
   font-size: 0.8rem;

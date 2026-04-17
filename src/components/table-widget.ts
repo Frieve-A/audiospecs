@@ -59,6 +59,8 @@ function formatUnitCasing(s: string): string {
   // CSS for table headers uses `text-transform: uppercase`, so we explicitly protect unit strings.
   return s
     .replace(/\(Hz\)/g, '(<span class="unit-case">Hz</span>)')
+    .replace(/\(dB\/mW\)/g, '(<span class="unit-case">dB</span>/<span class="unit-case">mW</span>)')
+    .replace(/\(dB\/V\)/g, '(<span class="unit-case">dB</span>/V)')
     .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)');
 }
 
@@ -112,6 +114,7 @@ export async function renderTableWidget(
       CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END as brand_label,
       ${PRODUCT_NAME_EXPR} as product_name,
       p.category_primary,
+      p.review_url_frieve_audio_review,
       ${allSelectParts.join(', ')}
     FROM web_product_core p
     WHERE p.category_primary IN (${catPlaceholders})
@@ -160,8 +163,8 @@ export async function renderTableWidget(
       <td><button class="compare-add" data-id="${r.product_id}" title="${t('explore.add_to_compare')}">+</button></td>
       <td class="search-icons">
         <button class="search-google" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Google">${GOOGLE_SVG}</button>
-        <button class="search-frieve" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Frieve - Audio Review">🎧</button>
         <button class="search-amazon" data-brand="${escHtml(String(r.brand_label || ''))}" data-name="${escHtml(String(r.product_name || ''))}" title="Amazon [PR]">${AMAZON_SVG}</button>
+        ${r.review_url_frieve_audio_review ? `<button class="search-frieve" data-ref="${escHtml(String(r.review_url_frieve_audio_review))}" title="${escHtml(t('analysis.ctx.open_frieve'))}">🎧</button>` : ''}
       </td>
     </tr>
   `).join('');
@@ -215,9 +218,11 @@ export async function renderTableWidget(
   });
   tableEl.querySelectorAll<HTMLElement>('.search-frieve').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const q = `${btn.dataset.brand} ${btn.dataset.name}`.trim().split(/\s+/).map(encodeURIComponent).join('+');
-      const lang = getLocale() === 'ja' ? 'ja' : 'en';
-      window.open(`https://audioreview.frieve.com/search/${lang}/?q=${q}`, '_blank');
+      const ref = btn.dataset.ref;
+      if (ref) {
+        const lang = getLocale() === 'ja' ? 'ja' : 'en';
+        window.open(`https://audioreview.frieve.com/products/${lang}/${encodeURIComponent(ref)}/`, '_blank');
+      }
     });
   });
   tableEl.querySelectorAll<HTMLElement>('.search-amazon').forEach((btn) => {
