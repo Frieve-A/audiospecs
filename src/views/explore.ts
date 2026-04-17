@@ -8,6 +8,14 @@ import { showToast } from '../toast';
 import { isMultiSourceBaseKey, isRowValueMeasured, MEASURED_FLAG_PREFIX, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { attachClearable } from '../components/clearable-input';
 import { MAX_COMPARE_PRODUCTS } from './compare';
+import {
+  type FilterPanelState, type BoolFilterState,
+  createFilterState, parseFilterParams, serializeFilterParams,
+  buildFilterConditions, hasActiveFilters, clearFilters,
+  getFiltersForCategory, getTextFiltersForCategory,
+  renderBoolFilterPanel, renderTextFilterDropdowns,
+  attachBoolFilterListeners, attachTextFilterListeners,
+} from '../components/bool-filter';
 
 interface ExploreState {
   search: string;
@@ -16,6 +24,7 @@ interface ExploreState {
   sortDir: 'asc' | 'desc';
   page: number;
   columns: string[];
+  filters: FilterPanelState;
 }
 
 const PAGE_SIZE = 50;
@@ -38,6 +47,25 @@ const ALL_NUMERIC_COLUMNS = AXES.map((a) => ({
   numeric: true,
   source: a.source,
 }));
+
+/** Column group definitions for the column selector UI */
+type ColGroupId = 'price_time' | 'audio_quality' | 'transducer' | 'fr_rating' | 'output' | 'wireless_battery' | 'dac_digital' | 'physical_other';
+
+const COL_GROUP_ORDER: ColGroupId[] = [
+  'price_time', 'audio_quality', 'transducer', 'fr_rating',
+  'output', 'wireless_battery', 'dac_digital', 'physical_other',
+];
+
+function getColGroup(key: string): ColGroupId {
+  if (/^(price_anchor_usd|msrp_usd|release_year)$/.test(key)) return 'price_time';
+  if (/^(sinad_db|snr_db|thd_percent|dynamic_range_db|crosstalk_db|freq_(low|high)_hz)/.test(key)) return 'audio_quality';
+  if (/^(impedance_ohm|sensitivity_|driveability_|driver_total_count|driver_size_max_mm)/.test(key)) return 'transducer';
+  if (/^(fr_harman_|preference_score)/.test(key)) return 'fr_rating';
+  if (/^(amp_|line_output_impedance)/.test(key)) return 'output';
+  if (/^(bluetooth_|wireless_|battery_)/.test(key)) return 'wireless_battery';
+  if (/^(dac_|dsd_)/.test(key)) return 'dac_digital';
+  return 'physical_other';
+}
 
 /** Default numeric column keys (matches original display) */
 const DEFAULT_NUMERIC_KEYS = [
@@ -79,12 +107,25 @@ export async function renderExplore(
   const stored = loadExploreState();
   const hasUrlParams = params.toString().length > 0;
 
+  // Fetch all distinct categories from the DB, preserving CATEGORY_KEYS order
+  // for known categories and appending any new ones found in the DB.
+  const catRows = await query<{ category_primary: string }>(
+    'SELECT DISTINCT category_primary FROM web_product_core WHERE category_primary IS NOT NULL ORDER BY category_primary',
+  );
+  const dbCategories = catRows.map((r) => r.category_primary);
+  const allCategoryKeys = [
+    ...CATEGORY_KEYS.filter((k) => dbCategories.includes(k)),
+    ...dbCategories.filter((k) => !CATEGORY_KEYS.includes(k)),
+  ];
+
   // Pre-compute global min/max (unfiltered) for ALL numeric columns.
   // Columns whose MIN and MAX are both null have no data at all — we hide
   // these from the column selector and always force them off.
   function colSqlExpr(col: typeof ALL_NUMERIC_COLUMNS[number]): string {
     if (col.key === 'price_anchor_usd') return 'coalesce(p.street_price_usd, p.msrp_usd)';
     if (col.key === 'msrp_usd') return 'p.msrp_usd';
+    // For computed axes (e.g. json_extract), use the source expression directly
+    if (col.source !== col.key) return col.source;
     return `p.${col.key}`;
   }
   const allNumericKeysForStats = ALL_NUMERIC_COLUMNS.map((c) => c.key);
@@ -124,6 +165,10 @@ export async function renderExplore(
     : (!hasUrlParams && storedCols != null) ? storedCols
     : DEFAULT_NUMERIC_KEYS_AVAILABLE;
 
+  // Parse filter state from URL or session
+  const urlFilters = hasUrlParams ? parseFilterParams(params) : null;
+  const storedFilters: FilterPanelState | null = (!hasUrlParams && stored.filters) ? stored.filters as unknown as FilterPanelState : null;
+
   const state: ExploreState = {
     search: params.get('q') || (!hasUrlParams ? stored.search || '' : ''),
     category: params.get('cat') || (!hasUrlParams ? stored.category || '' : ''),
@@ -135,6 +180,7 @@ export async function renderExplore(
       : (!hasUrlParams && stored.sortDir ? stored.sortDir : 'desc'),
     page: Number(params.get('page')) || (!hasUrlParams && stored.page ? stored.page : 0),
     columns: initialColumns,
+    filters: urlFilters ?? storedFilters ?? createFilterState(),
   };
 
   const colSelectionSet = new Set(state.columns);
@@ -153,7 +199,7 @@ export async function renderExplore(
         <label>${t('explore.label.category')}</label>
         <select id="explore-cat">
           <option value="">${t('common.all')}</option>
-          ${CATEGORY_KEYS.map((c) => `<option value="${c}" ${state.category === c ? 'selected' : ''}>${getCategoryLabel(c)}</option>`).join('')}
+          ${allCategoryKeys.map((c) => `<option value="${c}" ${state.category === c ? 'selected' : ''}>${getCategoryLabel(c)}</option>`).join('')}
         </select>
       </div>
       <div class="control-group" style="display:flex;flex-direction:row;align-items:flex-end;margin-left:auto;gap:0.5rem">
@@ -161,21 +207,48 @@ export async function renderExplore(
         <button id="explore-reset" class="danger">${t('common.reset')}</button>
       </div>
     </div>
+    <div class="filter-section" id="explore-filter-section">
+      <button class="filter-section-toggle" id="explore-filter-toggle">
+        ${t('explore.label.filters')} <span class="column-selector-arrow">▸</span><span class="filter-count" id="explore-filter-count" hidden>0</span>
+      </button>
+      <div class="filter-section-body" id="explore-filter-body" hidden>
+        <div id="explore-bool-filters"></div>
+        <div id="explore-text-filters"></div>
+      </div>
+    </div>
     <div class="column-selector" id="explore-col-selector">
       <button class="column-selector-toggle" id="explore-col-toggle">
         ${t('explore.label.columns')} <span class="column-selector-arrow">▸</span>
       </button>
       <div class="column-selector-panel" id="explore-col-panel" hidden>
-        <div class="column-selector-list">
-          ${AVAILABLE_NUMERIC_COLUMNS.map((col) => {
-            const desc = t(`axisdesc.${col.key}`);
-            const helpIcon = desc ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
+        ${(() => {
+          const grouped = new Map<ColGroupId, typeof AVAILABLE_NUMERIC_COLUMNS>();
+          for (const col of AVAILABLE_NUMERIC_COLUMNS) {
+            const g = getColGroup(col.key);
+            if (!grouped.has(g)) grouped.set(g, []);
+            grouped.get(g)!.push(col);
+          }
+          return COL_GROUP_ORDER.filter((g) => grouped.has(g)).map((g) => {
+            const cols = grouped.get(g)!;
             return `
-            <label class="column-selector-item">
-              <input type="checkbox" value="${col.key}" ${colSelectionSet.has(col.key) ? 'checked' : ''} />
-              ${tAxis(col.key)}${helpIcon}
-            </label>`;
-          }).join('')}
+            <div class="column-selector-group">
+              <div class="column-selector-group-label">${t(`explore.colgroup.${g}`)}</div>
+              <div class="column-selector-list">
+                ${cols.map((col) => {
+                  const desc = t(`axisdesc.${col.key}`);
+                  const helpIcon = desc ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
+                  return `
+                  <label class="column-selector-item">
+                    <input type="checkbox" value="${col.key}" ${colSelectionSet.has(col.key) ? 'checked' : ''} />
+                    ${tAxis(col.key)}${helpIcon}
+                  </label>`;
+                }).join('')}
+              </div>
+            </div>`;
+          }).join('');
+        })()}
+        <div style="text-align:right;margin-top:0.4rem">
+          <button class="column-clear-btn" id="explore-col-clear">${t('explore.columns.clear')}</button>
         </div>
       </div>
     </div>
@@ -207,8 +280,11 @@ export async function renderExplore(
     p.sort = `${state.sort}:${state.sortDir}`;
     if (state.page > 0) p.page = String(state.page);
     if (!isDefaultColumns()) p.cols = state.columns.length ? state.columns.join(',') : 'none';
+    // Add filter params
+    const filterParams = serializeFilterParams(state.filters);
+    Object.assign(p, filterParams);
     const qs = '?' + new URLSearchParams(p).toString();
-    history.replaceState(null, '', `#/explore${qs}`);
+    history.replaceState(null, '', `/explore${qs}`);
     saveExploreState(state);
   }
 
@@ -304,10 +380,18 @@ export async function renderExplore(
       sqlParams.push(state.category);
     }
     if (state.search) {
-      conditions.push("(p.product_name LIKE ? OR p.brand_name_en LIKE ? OR p.manufacturer_name_en LIKE ?)");
-      const like = `%${state.search}%`;
-      sqlParams.push(like, like, like);
+      const keywords = state.search.trim().split(/\s+/).filter(Boolean);
+      for (const kw of keywords) {
+        conditions.push("(p.product_name LIKE ? OR p.brand_name_en LIKE ? OR p.manufacturer_name_en LIKE ?)");
+        const like = `%${kw}%`;
+        sqlParams.push(like, like, like);
+      }
     }
+
+    // Boolean + text filters
+    const [filterConds, filterParams] = buildFilterConditions(state.filters);
+    conditions.push(...filterConds);
+    sqlParams.push(...filterParams);
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
@@ -375,7 +459,7 @@ export async function renderExplore(
       ? rows
           .map(
             (r) => `
-          <tr>
+          <tr class="explore-row" data-brand="${escHtml(String(r.brand_label || ''))}" data-product="${escHtml(String(r.product_name || ''))}">
             ${activeCols.map((col) => {
               const v = r[col.key];
               const fixedClass = FIXED_COLUMN_KEYS.has(col.key) ? 'fixed-col' : '';
@@ -491,6 +575,22 @@ export async function renderExplore(
       });
     });
 
+    // Row click → navigate to product detail page
+    const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    tbodyEl.querySelectorAll<HTMLElement>('tr.explore-row').forEach((tr) => {
+      tr.addEventListener('click', (e) => {
+        // Don't navigate if clicking on a button, link, or action cell
+        const target = e.target as HTMLElement;
+        if (target.closest('button, a, .col-action, .search-icons')) return;
+        const brand = tr.dataset.brand || '';
+        const product = tr.dataset.product || '';
+        if (!brand || !product) return;
+        const url = `/product/${slug(brand)}/${slug(product)}`;
+        history.pushState(null, '', url);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+    });
+
     // Source context menu on spec cells (right-click / long-tap)
     tbodyEl.querySelectorAll<HTMLElement>('td[data-product-id][data-col]').forEach((td) => {
       td.addEventListener('contextmenu', (e) => {
@@ -544,9 +644,11 @@ export async function renderExplore(
     }, 300);
   });
   attachClearable(exploreSearchInput);
-  document.getElementById('explore-cat')!.addEventListener('change', (e) => {
+  document.getElementById('explore-cat')!.addEventListener('change', async (e) => {
     state.category = (e.target as HTMLSelectElement).value;
     state.page = 0;
+    // Re-render filter panel for the new category
+    await renderFilterPanel();
     syncUrl();
     loadData();
   });
@@ -579,8 +681,86 @@ export async function renderExplore(
     });
   });
 
+  // Column clear button
+  document.getElementById('explore-col-clear')!.addEventListener('click', () => {
+    colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
+      cb.checked = false;
+    });
+    state.columns = [];
+    if (state.sort !== 'brand_label') {
+      state.sort = DEFAULT_SORT;
+      state.sortDir = 'desc';
+    }
+    state.page = 0;
+    syncUrl();
+    loadData();
+  });
+
   // Column selector help tooltips
   setupColHelpTooltips(colPanel, colPanel);
+
+  // ── Filter panel ──
+  const filterToggleBtn = document.getElementById('explore-filter-toggle')!;
+  const filterBody = document.getElementById('explore-filter-body')!;
+  const filterCountBadge = document.getElementById('explore-filter-count')!;
+
+  filterToggleBtn.addEventListener('click', () => {
+    const open = !filterBody.hidden;
+    filterBody.hidden = !filterBody.hidden;
+    filterToggleBtn.querySelector('.column-selector-arrow')!.textContent = open ? '▸' : '▾';
+  });
+
+  function updateFilterCount(): void {
+    const count = Object.values(state.filters.boolFilters).filter((v) => v !== 'any').length
+      + Object.values(state.filters.textFilters).filter((v) => !!v).length;
+    filterCountBadge.textContent = String(count);
+    filterCountBadge.hidden = count === 0;
+  }
+
+  async function renderFilterPanel(): Promise<void> {
+    const boolContainer = document.getElementById('explore-bool-filters')!;
+    const textContainer = document.getElementById('explore-text-filters')!;
+    const boolFilters = state.category ? getFiltersForCategory(state.category) : [];
+    const textFilters = state.category ? getTextFiltersForCategory(state.category) : [];
+
+    // Clear filters that don't apply to the new category
+    if (boolFilters.length > 0) {
+      const validCols = new Set(boolFilters.map((f) => f.column));
+      for (const col of Object.keys(state.filters.boolFilters)) {
+        if (!validCols.has(col)) delete state.filters.boolFilters[col];
+      }
+    }
+    if (textFilters.length > 0) {
+      const validCols = new Set(textFilters.map((f) => f.column));
+      for (const col of Object.keys(state.filters.textFilters)) {
+        if (!validCols.has(col)) delete state.filters.textFilters[col];
+      }
+    }
+
+    boolContainer.innerHTML = renderBoolFilterPanel(boolFilters, state.filters, 'explore-bf');
+    textContainer.innerHTML = await renderTextFilterDropdowns(textFilters, state.filters, 'explore-tf');
+
+    attachBoolFilterListeners('explore-bf', state.filters, () => {
+      state.page = 0;
+      updateFilterCount();
+      syncUrl();
+      loadData();
+    });
+    attachTextFilterListeners('explore-tf', state.filters, () => {
+      state.page = 0;
+      updateFilterCount();
+      syncUrl();
+      loadData();
+    });
+
+    updateFilterCount();
+
+    // Show/hide the filter section based on whether a category is selected
+    const filterSection = document.getElementById('explore-filter-section')!;
+    filterSection.style.display = (boolFilters.length === 0 && textFilters.length === 0) ? 'none' : '';
+  }
+
+  await renderFilterPanel();
 
   // Download CSV button
   document.getElementById('explore-download')!.addEventListener('click', async () => {
@@ -592,10 +772,17 @@ export async function renderExplore(
       sqlParams.push(state.category);
     }
     if (state.search) {
-      conditions.push("(p.product_name LIKE ? OR p.brand_name_en LIKE ? OR p.manufacturer_name_en LIKE ?)");
-      const like = `%${state.search}%`;
-      sqlParams.push(like, like, like);
+      const keywords = state.search.trim().split(/\s+/).filter(Boolean);
+      for (const kw of keywords) {
+        conditions.push("(p.product_name LIKE ? OR p.brand_name_en LIKE ? OR p.manufacturer_name_en LIKE ?)");
+        const like = `%${kw}%`;
+        sqlParams.push(like, like, like);
+      }
     }
+    // Boolean + text filters for CSV download
+    const [dlFilterConds, dlFilterParams] = buildFilterConditions(state.filters);
+    conditions.push(...dlFilterConds);
+    sqlParams.push(...dlFilterParams);
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const numericSelectParts = activeCols
       .filter((c) => c.numeric)
@@ -641,7 +828,7 @@ export async function renderExplore(
   });
 
   // Reset button — restore defaults and clear sessionStorage
-  document.getElementById('explore-reset')!.addEventListener('click', () => {
+  document.getElementById('explore-reset')!.addEventListener('click', async () => {
     sessionStorage.removeItem(EXPLORE_STORAGE_KEY);
     state.search = '';
     state.category = '';
@@ -649,6 +836,7 @@ export async function renderExplore(
     state.sortDir = 'desc';
     state.page = 0;
     state.columns = [...DEFAULT_NUMERIC_KEYS_AVAILABLE];
+    clearFilters(state.filters);
     // Update UI inputs
     (document.getElementById('explore-search') as HTMLInputElement).value = '';
     (document.getElementById('explore-cat') as HTMLSelectElement).value = '';
@@ -657,6 +845,7 @@ export async function renderExplore(
     colPanel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((cb) => {
       cb.checked = defaultSet.has(cb.value);
     });
+    await renderFilterPanel();
     syncUrl();
     loadData();
   });
@@ -739,9 +928,15 @@ function formatUnitCasing(s: string): string {
   // CSS for table headers uses `text-transform: uppercase`, so we explicitly protect unit strings.
   return s
     .replace(/\(Hz\)/g, '(<span class="unit-case">Hz</span>)')
+    .replace(/\(kHz\)/g, '(<span class="unit-case">kHz</span>)')
     .replace(/\(dB\)/g, '(<span class="unit-case">dB</span>)')
     .replace(/\(g\)/g, '(<span class="unit-case">g</span>)')
     .replace(/\(mW/g, '(<span class="unit-case">mW</span>')
-    .replace(/\(Vrms\)/g, '(<span class="unit-case">Vrms</span>)');
+    .replace(/\(Vrms\)/g, '(<span class="unit-case">Vrms</span>)')
+    .replace(/\(mAh\)/g, '(<span class="unit-case">mAh</span>)')
+    .replace(/\(mm\)/g, '(<span class="unit-case">mm</span>)')
+    .replace(/\(m\)/g, '(<span class="unit-case">m</span>)')
+    .replace(/\(h\)/g, '(<span class="unit-case">h</span>)')
+    .replace(/\(W\)/g, '(<span class="unit-case">W</span>)');
 }
 

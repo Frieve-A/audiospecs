@@ -61,12 +61,18 @@ const CONNECTOR_LABELS: Record<string, string> = {
   'rca': 'RCA',
   'xlr': 'XLR',
   'xlr_4pin': 'XLR 4-Pin',
+  'xlr_balanced': 'XLR Balanced',
   'mini_xlr': 'Mini XLR',
   'trs_6_35mm': '6.35mm',
   'trs_3_5mm': '3.5mm',
   'trs_2_5mm': '2.5mm',
   'pentaconn_4_4mm': '4.4mm',
+  '6_35mm': '6.35mm',
+  '3_5mm': '3.5mm',
+  '2_5mm': '2.5mm',
+  '4_4mm': '4.4mm',
   'speakon': 'Speakon',
+  'speaker_post': 'Speaker Post',
   'banana': 'Banana',
   'binding_post': 'Binding Post',
   'hdmi': 'HDMI',
@@ -168,7 +174,8 @@ export function getExtendedCompactFields(): CompactField[] {
       labelKey: 'compare.field.cable',
       type: 'compact',
       sourceKeys: [
-        'cable_is_detachable', 'cable_plug_mm', 'cable_length_m',
+        'cable_is_detachable', 'cable_plug_2_5mm', 'cable_plug_3_5mm',
+        'cable_plug_4_4mm', 'cable_plug_6_35mm', 'cable_length_m',
         'cable_has_balanced_option',
         'cable_socket_2pin', 'cable_socket_mmcx',
         'cable_socket_proprietary', 'cable_socket_mini_xlr',
@@ -185,10 +192,15 @@ export function getExtendedCompactFields(): CompactField[] {
           [row.cable_socket_proprietary, 'Proprietary'],
         ] as [unknown, string][]).filter(([v]) => v === 1).map(([, l]) => l);
         if (sockets.length) parts.push(sockets.join('/'));
-        const specs: string[] = [];
-        if (row.cable_plug_mm != null) specs.push(`${fmtNum(Number(row.cable_plug_mm))}mm`);
-        if (row.cable_length_m != null) specs.push(`${fmtNum(Number(row.cable_length_m))}m`);
-        if (specs.length) parts.push(specs.join(', '));
+        // Plug sizes as boolean tags
+        const plugs = ([
+          [row.cable_plug_2_5mm, '2.5mm'],
+          [row.cable_plug_3_5mm, '3.5mm'],
+          [row.cable_plug_4_4mm, '4.4mm'],
+          [row.cable_plug_6_35mm, '6.35mm'],
+        ] as [unknown, string][]).filter(([v]) => v === 1).map(([, l]) => l);
+        if (plugs.length) parts.push(plugs.join(', '));
+        if (row.cable_length_m != null) parts.push(`${fmtNum(Number(row.cable_length_m))}m`);
         if (row.cable_has_balanced_option === 1) parts.push('(Bal.)');
         return parts.join(' — ') || '—';
       },
@@ -330,16 +342,14 @@ export function getExtendedCompactFields(): CompactField[] {
       key: 'ext_size',
       labelKey: 'compare.field.size',
       type: 'compact',
-      sourceKeys: ['width_mm', 'height_mm', 'depth_mm', 'driver_size_mm'],
+      sourceKeys: ['width_mm', 'height_mm', 'depth_mm'],
       section: 'section.dimensions',
       formatRow(row) {
-        const parts: string[] = [];
         const dims = [row.width_mm, row.height_mm, row.depth_mm];
         if (dims.some((d) => d != null)) {
-          parts.push(dims.map((d) => d != null ? fmtNum(Number(d)) : '?').join(' \u00d7 ') + ' mm');
+          return dims.map((d) => d != null ? fmtNum(Number(d)) : '?').join(' \u00d7 ') + ' mm';
         }
-        if (row.driver_size_mm != null) parts.push(`Driver: ${fmtNum(Number(row.driver_size_mm))}mm`);
-        return parts.join(' — ') || null;
+        return null;
       },
     },
 
@@ -383,7 +393,7 @@ export function getExtendedCompactFields(): CompactField[] {
       labelKey: 'compare.field.driver',
       type: 'compact',
       sourceKeys: [
-        'driver_type', 'driver_diameter_mm', 'driver_diaphragm_material',
+        'driver_type', 'driver_sizes_mm', 'driver_diaphragm_material',
         'driver_magnet_material',
       ],
       section: 'section.driver',
@@ -394,7 +404,12 @@ export function getExtendedCompactFields(): CompactField[] {
         if (row.driver_type && !isNotDriverType(String(row.driver_type))) {
           drv.push(capitalize(String(row.driver_type)));
         }
-        if (row.driver_diameter_mm != null) drv.push(`${fmtNum(Number(row.driver_diameter_mm))}mm`);
+        if (row.driver_sizes_mm) {
+          try {
+            const sizes = JSON.parse(row.driver_sizes_mm as string) as number[];
+            if (sizes.length) drv.push(sizes.map((d) => fmtNum(d)).join(', ') + 'mm');
+          } catch { /* skip */ }
+        }
         if (drv.length) parts.push(drv.join(' '));
         const mats: string[] = [];
         if (row.driver_diaphragm_material) mats.push(String(row.driver_diaphragm_material));

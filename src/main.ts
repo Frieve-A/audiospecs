@@ -6,7 +6,7 @@ declare global {
 
 import './style.css';
 import { initDatabase } from './db/database';
-import { onRouteChange, type Route, type RouteInfo } from './router';
+import { onRouteChange, redirectLegacyHash, type Route, type RouteInfo } from './router';
 import { renderHome } from './views/home';
 import { renderExplore } from './views/explore';
 import { renderCompare } from './views/compare';
@@ -14,8 +14,35 @@ import { renderAbout } from './views/about';
 import { initI18n, t, getLocale, setLocale, onLocaleChange, AVAILABLE_LOCALES } from './i18n';
 import { applyTheme, getThemeMode, initTheme, cycleTheme, onThemeChange } from './theme';
 
+/* ── PC / Mobile viewport switching ── */
+const VIEWPORT_KEY = 'audiospecs-viewport-mode';
+const PC_VIEWPORT = 'width=1200';
+const MOBILE_VIEWPORT = 'width=device-width, initial-scale=1.0';
+
+function isMobileDevice(): boolean {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function getViewportMode(): 'pc' | 'mobile' {
+  return localStorage.getItem(VIEWPORT_KEY) === 'pc' ? 'pc' : 'mobile';
+}
+
+function applyViewportMode(mode: 'pc' | 'mobile'): void {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (meta) {
+    meta.setAttribute('content', mode === 'pc' ? PC_VIEWPORT : MOBILE_VIEWPORT);
+  }
+}
+
+function toggleViewportMode(): void {
+  const next = getViewportMode() === 'pc' ? 'mobile' : 'pc';
+  localStorage.setItem(VIEWPORT_KEY, next);
+  applyViewportMode(next);
+  location.reload();
+}
+
 const NAV_ROUTES: Route[] = ['home', 'analysis', 'explore', 'compare', 'about'];
-const NAV_LABEL_KEYS: Record<Route, string> = {
+const NAV_LABEL_KEYS: Partial<Record<Route, string>> = {
   home: 'nav.home',
   analysis: 'nav.analysis',
   explore: 'nav.explore',
@@ -28,9 +55,9 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
   app.innerHTML = `
     <nav class="main-nav">
       <div class="nav-inner">
-      <a href="#/home" class="logo"><img class="logo-icon" src="/assets/images/icon-64x64.png" alt="Frieve logo" />${t('nav.logo')}</a>
+      <a href="/home" class="logo"><img class="logo-icon" src="/assets/images/icon-64x64.png" alt="Frieve logo" />${t('nav.logo')}</a>
       <div class="nav-links" id="nav-links">
-      ${NAV_ROUTES.map((route) => `<a href="#/${route}" data-route="${route}">${t(NAV_LABEL_KEYS[route])}</a>`).join('')}
+      ${NAV_ROUTES.map((route) => `<a href="/${route}" data-route="${route}">${t(NAV_LABEL_KEYS[route]!)}</a>`).join('')}
       <div class="nav-spacer"></div>
       <button id="share-btn" class="share-btn" title="${t('common.share')}">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -71,6 +98,10 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
         <a href="https://github.com/Frieve-A/audiospecs" target="_blank">${t('about.link.github')}</a>
         <a href="https://ko-fi.com/frievea" target="_blank">${t('about.link.support')}</a>
       </div>
+      ${isMobileDevice() ? `
+      <div class="footer-viewport-switch">
+        <a href="#" id="viewport-toggle">${getViewportMode() === 'pc' ? t('footer.view_mobile') : t('footer.view_pc')}</a>
+      </div>` : ''}
     </footer>
   `;
 
@@ -81,12 +112,21 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
     hamburger.classList.toggle('open', expanded);
     hamburger.setAttribute('aria-expanded', String(expanded));
   });
-  navLinks.querySelectorAll('a[data-route]').forEach((a) => {
-    a.addEventListener('click', () => {
-      navLinks.classList.remove('open');
-      hamburger.classList.remove('open');
-      hamburger.setAttribute('aria-expanded', 'false');
-    });
+  // Global SPA link interception for internal paths
+  document.addEventListener('click', (e) => {
+    const anchor = (e.target as Element).closest('a[href]') as HTMLAnchorElement | null;
+    if (!anchor) return;
+    const href = anchor.getAttribute('href');
+    if (!href || !href.startsWith('/') || href.startsWith('//')) return;
+    // Skip external links and download links
+    if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+    e.preventDefault();
+    // Close mobile nav if open
+    navLinks.classList.remove('open');
+    hamburger.classList.remove('open');
+    hamburger.setAttribute('aria-expanded', 'false');
+    history.pushState(null, '', href);
+    window.dispatchEvent(new PopStateEvent('popstate'));
   });
 
   document.querySelectorAll('.locale-select').forEach((el) => {
@@ -117,6 +157,15 @@ function createShell(): { nav: HTMLElement; content: HTMLElement } {
     el.addEventListener('click', () => cycleTheme());
   });
 
+  // Viewport toggle (mobile only)
+  const vpToggle = document.getElementById('viewport-toggle');
+  if (vpToggle) {
+    vpToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleViewportMode();
+    });
+  }
+
   return {
     nav: app.querySelector('nav')!,
     content: document.getElementById('main-content')!,
@@ -139,6 +188,9 @@ function updateNav(nav: HTMLElement, route: Route): void {
 }
 
 async function main(): Promise<void> {
+  // Redirect legacy #/ URLs to clean paths
+  redirectLegacyHash();
+
   // Apply theme early to avoid flash of wrong theme
   applyTheme(getThemeMode());
   initI18n();
@@ -169,6 +221,10 @@ async function main(): Promise<void> {
     explore: renderExplore,
     compare: renderCompare,
     about: renderAbout,
+    product: async (el, params) => {
+      const { renderProduct } = await import('./views/product');
+      await renderProduct(el, params);
+    },
   };
 
   let currentRoute: string | null = null;
@@ -223,7 +279,7 @@ async function main(): Promise<void> {
     const titleKey = `page.title.${info.route}`;
     document.title = t(titleKey) || t('page.title');
 
-    // Send GA4 page_view for hash-based navigation
+    // Send GA4 page_view for SPA navigation
     if (typeof window.gtag === 'function') {
       window.gtag('event', 'page_view', {
         page_title: document.title,
@@ -234,6 +290,11 @@ async function main(): Promise<void> {
 
     await renderCurrentRoute();
   });
+}
+
+// Apply saved viewport mode before rendering
+if (isMobileDevice()) {
+  applyViewportMode(getViewportMode());
 }
 
 main();

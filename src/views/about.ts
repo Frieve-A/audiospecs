@@ -1,5 +1,6 @@
 import { query } from '../db/database';
 import { getCategoryLabel } from '../presets';
+import { navigate } from '../router';
 import { t } from '../i18n';
 
 export async function renderAbout(container: HTMLElement): Promise<void> {
@@ -96,7 +97,7 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
             </thead>
             <tbody>
               ${catCoverage.map((c) => `
-                <tr>
+                <tr class="clickable-row" data-category="${c.category_primary}">
                   <td><span class="chip cat-${c.category_primary}">${getCategoryLabel(c.category_primary)}</span></td>
                   <td class="numeric">${c.total}</td>
                   <td class="numeric">${c.has_price}</td>
@@ -146,7 +147,6 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
       <section class="about-section">
         <h2>${t('about.section.notes')}</h2>
         <ul class="about-list">
-          <li>${t('about.note.freshness')}</li>
           <li>${t('about.note.errors')}</li>
         </ul>
       </section>
@@ -164,4 +164,12 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
 
     </div>
   `;
+
+  // Navigate to Explore page when clicking a category coverage row
+  contentEl.querySelectorAll<HTMLElement>('.clickable-row[data-category]').forEach((row) => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => {
+      navigate('explore', { cat: row.dataset.category! });
+    });
+  });
 }

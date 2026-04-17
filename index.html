@@ -48,6 +48,21 @@
 </head>
 <body>
   <div id="app"></div>
+  <script>
+    // Restore path from GitHub Pages 404.html SPA redirect
+    (function () {
+      var sp = new URLSearchParams(window.location.search);
+      var p = sp.get('p');
+      if (p) {
+        sp.delete('p');
+        var remaining = sp.toString();
+        // p already contains original query string; append any leftover params
+        var hasQ = p.indexOf('?') >= 0;
+        var url = p + (remaining ? ((hasQ ? '&' : '?') + remaining) : '');
+        history.replaceState(null, '', url);
+      }
+    })();
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

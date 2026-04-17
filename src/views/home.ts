@@ -234,7 +234,7 @@ function scatterLink(config: ScatterWidgetConfig): string {
   p.set('x', config.x);
   p.set('y', config.y);
   p.set('color', config.color);
-  return `#/analysis?${p.toString()}`;
+  return `/analysis?${p.toString()}`;
 }
 
 /** Build a hash link to the Explore tab matching this table config */
@@ -245,7 +245,7 @@ function tableLink(config: TableWidgetConfig): string {
   }
   p.set('sort', `${config.sort}:${config.sortDir}`);
   p.set('cols', config.columns.join(','));
-  return `#/explore?${p.toString()}`;
+  return `/explore?${p.toString()}`;
 }
 
 export async function renderHome(container: HTMLElement): Promise<void> {

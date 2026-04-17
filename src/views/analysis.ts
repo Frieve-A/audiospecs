@@ -8,6 +8,14 @@ import { showToast } from '../toast';
 import { attachClearable } from '../components/clearable-input';
 import { MAX_COMPARE_PRODUCTS } from './compare';
 import { chartColors } from '../theme';
+import {
+  type FilterPanelState,
+  createFilterState, parseFilterParams, serializeFilterParams,
+  buildFilterConditions, clearFilters,
+  getFiltersForCategory,
+  renderBoolFilterPanel,
+  attachBoolFilterListeners,
+} from '../components/bool-filter';
 
 const SOURCE_TYPE_COLORS: Record<string, string> = {
   spec: '#9333ea',
@@ -142,6 +150,7 @@ export async function renderAnalysis(
     if (!currentShowCorrelation) s.showCorrelation = '0';
     if (!currentShowPareto) s.showPareto = '0';
     if (!currentShowBetter) s.showBetter = '0';
+    s._filters = JSON.stringify(currentFilters);
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   }
 
@@ -166,6 +175,14 @@ export async function renderAnalysis(
     <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
       <div id="analysis-presets" class="preset-bar" style="flex:1;margin-bottom:0"></div>
       <button id="analysis-reset" class="danger">${t('common.reset')}</button>
+    </div>
+    <div class="filter-section" id="analysis-filter-section" style="display:none">
+      <button class="filter-section-toggle" id="analysis-filter-toggle">
+        ${t('explore.label.filters')} <span class="column-selector-arrow">▸</span><span class="filter-count" id="analysis-filter-count" hidden>0</span>
+      </button>
+      <div class="filter-section-body" id="analysis-filter-body" hidden>
+        <div id="analysis-bool-filters"></div>
+      </div>
     </div>
     <div id="analysis-warning"></div>
     <div id="analysis-interaction-hint" class="interaction-hint">${getInteractionHint()}</div>
@@ -204,6 +221,7 @@ export async function renderAnalysis(
   let currentShowCorrelation = (params.get('showCorrelation') || stored.showCorrelation || '1') !== '0';
   let currentShowPareto = (params.get('showPareto') || stored.showPareto || '1') !== '0';
   let currentShowBetter = (params.get('showBetter') || stored.showBetter || '1') !== '0';
+  let currentFilters: FilterPanelState = hasUrlParams ? parseFilterParams(params) : (stored._filters ? JSON.parse(stored._filters) as FilterPanelState : createFilterState());
 
   function syncUrl(): void {
     const p: Record<string, string> = {};
@@ -221,8 +239,11 @@ export async function renderAnalysis(
     if (!currentShowCorrelation) p.showCorrelation = '0';
     if (!currentShowPareto) p.showPareto = '0';
     if (!currentShowBetter) p.showBetter = '0';
+    // Add filter params
+    const filterParams = serializeFilterParams(currentFilters);
+    Object.assign(p, filterParams);
     const qs = '?' + new URLSearchParams(p).toString();
-    history.replaceState(null, '', `#/analysis${qs}`);
+    history.replaceState(null, '', `/analysis${qs}`);
     saveState();
   }
 
@@ -370,6 +391,7 @@ export async function renderAnalysis(
       syncUrl();
       renderControls();
       renderPresets();
+      renderAnalysisFilters();
       renderPlot();
     });
     document.getElementById('sel-x')!.addEventListener('change', async (e) => {
@@ -506,12 +528,59 @@ export async function renderAnalysis(
         currentShowCorrelation = true;
         currentShowPareto = true;
         currentShowBetter = true;
+        clearFilters(currentFilters);
         syncUrl();
         await renderControls();
         renderPresets();
+        renderAnalysisFilters();
         renderPlot();
       });
     });
+  }
+
+  // ── Filter panel ──
+  const analysisFilterToggle = document.getElementById('analysis-filter-toggle')!;
+  const analysisFilterBody = document.getElementById('analysis-filter-body')!;
+  const analysisFilterCount = document.getElementById('analysis-filter-count')!;
+  const analysisFilterSection = document.getElementById('analysis-filter-section')!;
+
+  analysisFilterToggle.addEventListener('click', () => {
+    const open = !analysisFilterBody.hidden;
+    analysisFilterBody.hidden = !analysisFilterBody.hidden;
+    analysisFilterToggle.querySelector('.column-selector-arrow')!.textContent = open ? '▸' : '▾';
+  });
+
+  function updateAnalysisFilterCount(): void {
+    const count = Object.values(currentFilters.boolFilters).filter((v) => v !== 'any').length;
+    analysisFilterCount.textContent = String(count);
+    analysisFilterCount.hidden = count === 0;
+  }
+
+  function renderAnalysisFilters(): void {
+    const cats = effectiveCats();
+    // Combine filters for all selected categories, dedup by column
+    const seen = new Set<string>();
+    const allFilters: import('../components/bool-filter').BoolFilterDef[] = [];
+    for (const cat of cats) {
+      for (const f of getFiltersForCategory(cat)) {
+        if (!seen.has(f.column)) {
+          seen.add(f.column);
+          allFilters.push(f);
+        }
+      }
+    }
+
+    const boolContainer = document.getElementById('analysis-bool-filters')!;
+    boolContainer.innerHTML = renderBoolFilterPanel(allFilters, currentFilters, 'analysis-bf');
+
+    attachBoolFilterListeners('analysis-bf', currentFilters, () => {
+      updateAnalysisFilterCount();
+      syncUrl();
+      renderPlot();
+    });
+
+    updateAnalysisFilterCount();
+    analysisFilterSection.style.display = allFilters.length > 0 ? '' : 'none';
   }
 
   // Track row data per trace for context menu lookup
@@ -627,6 +696,10 @@ export async function renderAnalysis(
       return 'NULL';
     }
 
+    // Build filter WHERE conditions
+    const [filterConds, filterSqlParams] = buildFilterConditions(currentFilters);
+    const filterWhere = filterConds.length ? '\n        AND ' + filterConds.join(' AND ') : '';
+
     const buildBranchSql = (
       xSrc: string,
       ySrc: string,
@@ -647,7 +720,7 @@ export async function renderAnalysis(
       FROM web_product_core p
       WHERE p.category_primary IN (${catPlaceholders})
         AND (${xSrc}) IS NOT NULL
-        AND (${ySrc}) IS NOT NULL
+        AND (${ySrc}) IS NOT NULL${filterWhere}
     `;
 
     let sql: string;
@@ -658,21 +731,21 @@ export async function renderAnalysis(
       sql = `${buildBranchSql(xSource, ySpec, 'spec')}
         UNION ALL
         ${buildBranchSql(xSource, yMeas, 'measured')}`;
-      sqlParams = [...cats, ...cats];
+      sqlParams = [...cats, ...filterSqlParams, ...cats, ...filterSqlParams];
     } else {
       sql = buildBranchSql(xSource, ySourceResolved);
-      sqlParams = [...cats];
+      sqlParams = [...cats, ...filterSqlParams];
     }
 
     let rows = clampForScatter(await query<RowType>(sql, sqlParams), currentX, currentY);
 
-    // Filter by keyword if set
+    // Filter by keyword if set (space-separated AND matching)
     if (currentKeyword) {
-      const kw = currentKeyword.toLowerCase();
-      rows = rows.filter((r) =>
-        r.brand_label.toLowerCase().includes(kw) ||
-        r.product_name.toLowerCase().includes(kw),
-      );
+      const keywords = currentKeyword.toLowerCase().split(/\s+/).filter(Boolean);
+      rows = rows.filter((r) => {
+        const text = (r.brand_label + ' ' + r.product_name).toLowerCase();
+        return keywords.every((kw) => text.includes(kw));
+      });
     }
 
     // Show warning if few points (or none)
@@ -1158,6 +1231,7 @@ export async function renderAnalysis(
     const menu = document.createElement('div');
     menu.className = 'scatter-ctx-menu';
     menu.innerHTML = `
+      <button data-action="details">${t('analysis.ctx.details')}</button>
       <button data-action="compare">${t('analysis.ctx.add_compare')}</button>
       <button data-action="google">${t('analysis.ctx.search_google')}</button>
       <button data-action="frieve">${t('analysis.ctx.search_frieve')}</button>
@@ -1173,6 +1247,14 @@ export async function renderAnalysis(
     if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 8}px`;
 
     const searchQuery = `${row.brand_label} ${row.product_name}`.trim();
+
+    menu.querySelector('[data-action="details"]')!.addEventListener('click', () => {
+      dismissCtxMenu();
+      const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      const url = `/product/${slug(row.brand_label || 'unknown')}/${slug(row.product_name)}`;
+      history.pushState(null, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
 
     menu.querySelector('[data-action="compare"]')!.addEventListener('click', (ev) => {
       dismissCtxMenu();
@@ -1321,9 +1403,11 @@ export async function renderAnalysis(
     currentShowCorrelation = true;
     currentShowPareto = true;
     currentShowBetter = true;
+    clearFilters(currentFilters);
     syncUrl();
     await renderControls();
     renderPresets();
+    renderAnalysisFilters();
     await renderPlot();
   });
 
@@ -1342,6 +1426,7 @@ export async function renderAnalysis(
 
   await renderControls();
   renderPresets();
+  renderAnalysisFilters();
   syncUrl();
   await renderPlot();
 }

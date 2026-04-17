@@ -2,8 +2,9 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 export default defineConfig({
-  base: './',
+  base: '/',
   publicDir: 'public',
+  appType: 'spa',
   build: {
     outDir: 'dist',
     target: 'es2022',

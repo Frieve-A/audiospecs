@@ -145,7 +145,7 @@ export async function renderCompare(
 
   // Sync restored IDs to URL so the share button captures the full state
   if (ids.length > 0 && urlIds.length === 0) {
-    history.replaceState(null, '', `#/compare?ids=${ids.join(',')}`);
+    history.replaceState(null, '', `/compare?ids=${ids.join(',')}`);
   }
 
   container.innerHTML = `
@@ -215,7 +215,7 @@ export async function renderCompare(
   document.getElementById('compare-clear-all')!.addEventListener('click', () => {
     ids.length = 0;
     saveIds(ids);
-    window.location.hash = '#/compare';
+    history.replaceState(null, '', '/compare');
     loadCompare();
   });
 
@@ -236,13 +236,15 @@ export async function renderCompare(
         resultsEl.style.display = 'none';
         return;
       }
-      const like = `%${q}%`;
+      const keywords = q.split(/\s+/).filter(Boolean);
+      const kwConditions = keywords.map(() => "(product_name LIKE ? OR brand_name_en LIKE ?)");
+      const kwParams = keywords.flatMap((kw) => { const like = `%${kw}%`; return [like, like]; });
       const results = await query<{ product_id: string; brand_name_en: string; product_name: string; variant: string; category_primary: string }>(
         `SELECT product_id, brand_name_en, product_name, variant, category_primary
          FROM web_product_core
-         WHERE product_name LIKE ? OR brand_name_en LIKE ?
+         WHERE ${kwConditions.join(' AND ')}
          LIMIT 10`,
-        [like, like],
+        kwParams,
       );
       if (!results.length) {
         resultsEl.innerHTML = `<div class="search-result-item" style="color:var(--text-tertiary)">${t('common.no_results')}</div>`;
@@ -264,7 +266,7 @@ export async function renderCompare(
           if (!ids.includes(id) && ids.length < MAX_COMPARE_PRODUCTS) {
             ids.push(id);
             saveIds(ids);
-            window.location.hash = `#/compare?ids=${ids.join(',')}`;
+            history.replaceState(null, '', `/compare?ids=${ids.join(',')}`);
             resultsEl.style.display = 'none';
             searchInput.value = '';
             loadCompare();
@@ -289,9 +291,15 @@ export async function renderCompare(
     if (!ids.length) {
       contentEl.innerHTML = `
         <div class="card">
-          <div class="card-body" style="text-align:center;padding:3rem;color:var(--text-tertiary)">
-            ${t('compare.empty.line1')}
-            <br/>${t('compare.empty.line2')}
+          <div class="card-body compare-empty-state">
+            <svg class="compare-empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+            <p class="compare-empty-line1">${t('compare.empty.line1')}</p>
+            <p class="compare-empty-line2">${t('compare.empty.line2')}</p>
           </div>
         </div>
       `;
@@ -600,7 +608,7 @@ export async function renderCompare(
         const idx = ids.indexOf(removeId);
         if (idx >= 0) ids.splice(idx, 1);
         saveIds(ids);
-        window.location.hash = `#/compare?ids=${ids.join(',')}`;
+        history.replaceState(null, '', `/compare?ids=${ids.join(',')}`);
         loadCompare();
       });
     });

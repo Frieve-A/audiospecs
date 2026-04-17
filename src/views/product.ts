@@ -1,57 +1,29 @@
 /**
- * Embeddable spec table renderer.
+ * Single product detail page.
  *
- * Reuses the same field definitions and formatters as the Compare page,
- * but renders a single-product vertical spec table for iframe embedding.
+ * Renders the same spec table / FR chart as the embed-spec widget,
+ * but inside the full site shell (header + footer).
+ * URL format: /product/{brand}/{product}
  */
 
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
 import { getCategoryLabel, getAxis, getScaleForField, computeBarPercent, productDisplayName } from '../presets';
-import { t } from '../i18n';
+import { t, getLocale } from '../i18n';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { setupColHelpTooltips } from '../components/col-help';
-import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls } from '../sources';
-import { getExtendedCompactFields, isCompactFieldVisible } from '../format-utils';
+import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls, fetchAllSourceUrls } from '../sources';
+import { getExtendedCompactFields, isCompactFieldVisible, escHtml as _escHtml, sig3 as _sig3, formatHz as _formatHz } from '../format-utils';
+import { chartColors } from '../theme';
+import { navigate } from '../router';
 
-/* ── Theme helper for chart colors ── */
+/* ── Helpers (re-exported from format-utils) ── */
 
-function isEmbedDark(): boolean {
-  const theme = document.documentElement.getAttribute('data-theme');
-  if (theme === 'dark') return true;
-  if (theme === 'light') return false;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-}
+const sig3 = _sig3;
+const formatHz = _formatHz;
+const escHtml = _escHtml;
 
-function embedChartColors() {
-  const dark = isEmbedDark();
-  return {
-    paper_bgcolor: dark ? '#1a1a1a' : '#fff',
-    plot_bgcolor: dark ? '#1a1a1a' : '#fff',
-    gridcolor: dark ? '#333' : '#eee',
-    zerolinecolor: dark ? '#444' : '#ddd',
-    axisTitleColor: dark ? '#ccc' : '#374151',
-    fontColor: dark ? '#ccc' : undefined,
-  };
-}
-
-/* ── Formatters (shared with compare.ts logic) ── */
-
-function sig3(v: number): string {
-  const n = parseFloat(v.toPrecision(3));
-  if (n !== 0 && Math.abs(n) < 0.001) {
-    const digits = -Math.floor(Math.log10(Math.abs(n))) + 2;
-    return n.toFixed(digits).replace(/\.?0+$/, '');
-  }
-  return n.toString();
-}
-
-function formatHz(v: number): string {
-  if (v >= 1000) return parseFloat((v / 1000).toPrecision(3)).toString() + 'k';
-  return sig3(v);
-}
-
-/* ── Field definitions (same as getCompareFields) ── */
+/* ── Field definitions (same as compare / embed-spec) ── */
 
 interface SpecField {
   key: string;
@@ -114,9 +86,8 @@ function getSpecFields(): SpecField[] {
 }
 
 /**
- * Filter fields for split spec/measured mode (same logic as compare.ts).
+ * Filter fields for split spec/measured mode.
  * In non-split mode: hide _measured/_spec variants whose base also exists.
- * In split mode: hide base fields that have _measured/_spec siblings.
  */
 function filterFieldsForSplitMode<T extends { key: string }>(fields: T[], split: boolean): T[] {
   const keys = new Set(fields.map((f) => f.key));
@@ -134,7 +105,7 @@ function filterFieldsForSplitMode<T extends { key: string }>(fields: T[], split:
   });
 }
 
-/* ── Product matching ── */
+/* ── Product lookup (same 4-level fallback as embed-spec) ── */
 
 interface ProductRow {
   product_id: string;
@@ -147,14 +118,14 @@ interface ProductRow {
 }
 
 /**
- * Find a product by brand + product name with progressive fallback:
+ * Find a product by brand + product slug with progressive fallback:
  * 1. Exact match on brand_name_en + product_name (case-insensitive)
- * 2. brand exact + product LIKE (shortest name wins)
+ * 2. Brand exact + product LIKE (shortest name wins)
  * 3. Also search manufacturer_name_en for brand
- * 4. Normalized match — strip spaces/hyphens and compare (handles "D90III" → "D90 III Sabre")
+ * 4. Slug-normalized match — slugify both DB values and query, compare
  */
 async function findProduct(brand: string, product: string): Promise<ProductRow | null> {
-  // 1. Exact match
+  // Try exact match first (works when params are raw names, e.g. from ?id= fallback)
   const exact = await query<ProductRow>(
     `SELECT p.*, coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd
      FROM web_product_core p
@@ -164,91 +135,135 @@ async function findProduct(brand: string, product: string): Promise<ProductRow |
   );
   if (exact.length > 0) return exact[0];
 
-  // 2. Brand exact + product LIKE (shortest name first)
-  const like = await query<ProductRow>(
-    `SELECT p.*, coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd
-     FROM web_product_core p
-     WHERE lower(p.brand_name_en) = lower(?) AND lower(p.product_name) LIKE ('%' || lower(?) || '%')
-     ORDER BY length(p.product_name)
-     LIMIT 1`,
-    [brand, product],
-  );
-  if (like.length > 0) return like[0];
+  // Slug-based matching: compare slugified DB values against the slugified params
+  const brandSlug = slugify(brand);
+  const productSlug = slugify(product);
 
-  // 3. Brand fuzzy (also check manufacturer_name_en)
-  const fuzzy = await query<ProductRow>(
-    `SELECT p.*, coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd
-     FROM web_product_core p
-     WHERE (lower(p.brand_name_en) = lower(?) OR lower(p.manufacturer_name_en) = lower(?))
-       AND lower(p.product_name) LIKE ('%' || lower(?) || '%')
-     ORDER BY length(p.product_name)
-     LIMIT 1`,
-    [brand, brand, product],
-  );
-  if (fuzzy.length > 0) return fuzzy[0];
-
-  // 4. Normalized match — strip spaces/hyphens and compare as a substring
-  //    e.g. query "D90III" matches DB "D90 III Sabre" because both normalize to contain "d90iii"
+  // Fetch all products from matching brand (by slug) for client-side slug comparison
   const candidates = await query<ProductRow>(
     `SELECT p.*, coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd
-     FROM web_product_core p
-     WHERE lower(p.brand_name_en) = lower(?) OR lower(p.manufacturer_name_en) = lower(?)`,
-    [brand, brand],
+     FROM web_product_core p`,
   );
-  const norm = (s: string) => s.toLowerCase().replace(/[\s\-_]+/g, '');
-  const needle = norm(product);
-  const matched = candidates
-    .filter((r) => norm(r.product_name).includes(needle))
+
+  // 1. Exact slug match on brand + product
+  const exactSlug = candidates.find(
+    (r) => slugify(r.brand_name_en) === brandSlug && slugify(r.product_name) === productSlug,
+  );
+  if (exactSlug) return exactSlug;
+
+  // 2. Brand slug match + product slug contains
+  const brandMatches = candidates.filter(
+    (r) => slugify(r.brand_name_en) === brandSlug || slugify(r.manufacturer_name_en || '') === brandSlug,
+  );
+  const contains = brandMatches
+    .filter((r) => slugify(r.product_name).includes(productSlug))
     .sort((a, b) => a.product_name.length - b.product_name.length);
-  return matched.length > 0 ? matched[0] : null;
+  if (contains.length > 0) return contains[0];
+
+  // 3. Reverse: product slug contains the query slug (handles truncated slugs)
+  const reverse = brandMatches
+    .filter((r) => productSlug.includes(slugify(r.product_name)))
+    .sort((a, b) => b.product_name.length - a.product_name.length);
+  if (reverse.length > 0) return reverse[0];
+
+  return null;
 }
 
-/* ── Escape helper ── */
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+async function findProductById(productId: string): Promise<ProductRow | null> {
+  const rows = await query<ProductRow>(
+    `SELECT p.*, coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd
+     FROM web_product_core p WHERE p.product_id = ? LIMIT 1`,
+    [productId],
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
+/* ── URL helpers ── */
+
+/**
+ * Convert a string to a URL-safe slug: lowercase, replace non-alphanum with
+ * hyphens, collapse consecutive hyphens, trim leading/trailing hyphens.
+ */
+export function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** Build a product detail page URL from brand + product names. */
+export function productPageUrl(brand: string, productName: string): string {
+  return `/product/${slugify(brand)}/${slugify(productName)}`;
+}
+
+/** Build a product detail page URL from a row object. */
+export function productPageUrlFromRow(row: { brand_name_en?: string; brand_label?: string; product_name: string }): string {
+  const brand = (row.brand_name_en || row.brand_label || 'unknown').toString();
+  return productPageUrl(brand, row.product_name);
 }
 
 /* ── Main render ── */
 
-export interface EmbedSpecParams {
-  brand: string;
-  product: string;
-  lang?: string;
-  theme?: string;
-}
-
-export async function renderEmbedSpec(
+export async function renderProduct(
   container: HTMLElement,
-  params: EmbedSpecParams,
+  params: URLSearchParams,
 ): Promise<void> {
-  const row = await findProduct(params.brand, params.product);
+  // Resolve product: prefer id param, then brand/product from path
+  const productId = params.get('id');
+  const brandParam = params.get('brand') || '';
+  const productParam = params.get('product') || '';
+
+  let row: ProductRow | null = null;
+  if (productId) {
+    row = await findProductById(productId);
+  }
+  if (!row && brandParam && productParam) {
+    row = await findProduct(brandParam, productParam);
+  }
 
   if (!row) {
-    const exploreUrl = `https://audiospecs.frieve.com/explore`;
     container.innerHTML = `
-      <div class="embed-error">
-        <div>${t('embed.error.not_found')}</div>
-        <div style="font-size:12px;margin-top:4px;color:var(--embed-text-secondary)">
-          ${esc(params.brand)} — ${esc(params.product)}
+      <div class="view-header">
+        <h1>${t('product.title')}</h1>
+      </div>
+      <div class="card">
+        <div class="card-body" style="text-align:center;padding:3rem">
+          <p>${t('product.not_found')}</p>
+          <p style="font-size:0.85rem;color:var(--text-secondary);margin-top:0.5rem">
+            ${escHtml(brandParam)} — ${escHtml(productParam)}
+          </p>
+          <a href="/explore" style="margin-top:1rem;display:inline-block">${t('product.back_to_explore')}</a>
         </div>
-        <a href="${exploreUrl}" target="_blank" rel="noopener">${t('embed.error.search_link')}</a>
       </div>`;
     return;
+  }
+
+  // Canonical URL: replace state to use the resolved brand/product names
+  const canonicalUrl = productPageUrl(
+    row.brand_name_en || 'unknown',
+    row.product_name,
+  );
+  if (window.location.pathname !== canonicalUrl) {
+    history.replaceState(null, '', canonicalUrl);
   }
 
   const brandLabel = row.brand_name_en || t('common.unknown');
   const productLabel = productDisplayName(row);
   const category = row.category_primary;
   const categoryLabel = getCategoryLabel(category);
-  const productId = row.product_id;
+  const pid = row.product_id;
+
+  // Update page title
+  document.title = `${brandLabel} ${productLabel} — Frieve - AudioSpecs`;
 
   // Filter fields: non-split mode (show "best" values only), hide nulls
   const allFields = filterFieldsForSplitMode(getSpecFields(), false);
-  const visibleFields = allFields.filter((f) => row[f.key] != null);
+  const visibleFields = allFields.filter((f) => row![f.key] != null);
 
-  // Fetch global min/max for bar rendering (same approach as compare.ts)
+  // Fetch global min/max for bar rendering
   const numericKeys = visibleFields
-    .filter((f) => typeof row[f.key] === 'number')
+    .filter((f) => typeof row![f.key] === 'number')
     .map((f) => f.key);
   const globalRange: Record<string, { min: number; max: number }> = {};
   if (numericKeys.length > 0) {
@@ -271,91 +286,116 @@ export async function renderEmbedSpec(
   let frHtml = '';
   if (hasFr) {
     frHtml = `
-      <div class="embed-fr-section">
-        <h3 class="embed-fr-title">${esc(t('compare.fr.title'))}</h3>
-        <div id="embed-fr-sources" class="embed-fr-sources"></div>
-        <div id="embed-fr-plot" style="width:100%;height:280px"></div>
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-body">
+          <h3 style="margin:0 0 0.5rem">${escHtml(t('compare.fr.title'))}</h3>
+          <div id="product-fr-plot" style="width:100%;height:400px;overflow:hidden"></div>
+          <div id="product-fr-sources" class="fr-sources-row" style="margin-top:0.5rem;font-size:13px;color:var(--text-secondary, #666)"></div>
+        </div>
       </div>`;
   }
 
-  // Build spec rows — each value cell carries data-product-id and data-col
-  // for the source context menu (right-click / long-press).
-  // Label cells include a ? help icon with axis description tooltip.
-  // Numeric cells show a background bar indicating relative position in the DB range.
+  // Build spec rows
   const rowsHtml = visibleFields.map((f) => {
-    const v = row[f.key];
+    const v = row![f.key];
     const formatted = f.format(v);
-    const badge = isRowValueMeasured(row, f.key) ? ' ' + measuredBadgeSvg() : '';
-    // Axis description tooltip (same keys as Compare page)
+    const badge = isRowValueMeasured(row!, f.key) ? ' ' + measuredBadgeSvg() : '';
     const descKey = `axisdesc.${f.key}`;
     const desc = t(descKey);
-    const helpIcon = desc !== descKey ? ` <span class="col-help" data-tooltip="${esc(desc)}">?</span>` : '';
-
-    // Bar rendering for numeric values
+    const helpIcon = desc !== descKey ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
     const range = globalRange[f.key];
     let barAttr = '';
     if (typeof v === 'number' && range) {
       const scale = getScaleForField(f.key);
       const pct = computeBarPercent(v, range.min, range.max, scale);
-      barAttr = ` class="embed-value-cell bar-cell" style="--bar-pct:${pct.toFixed(1)}"`;
+      barAttr = ` class="product-value-cell bar-cell" style="--bar-pct:${pct.toFixed(1)}"`;
     } else {
-      barAttr = ' class="embed-value-cell"';
+      barAttr = ' class="product-value-cell"';
     }
-
     return `<tr>
-      <td>${esc(t(f.labelKey))}${helpIcon}</td>
-      <td${barAttr} data-product-id="${esc(productId)}" data-col="${esc(f.key)}">${esc(formatted)}${badge}</td>
+      <td class="product-label-cell">${escHtml(t(f.labelKey))}${helpIcon}</td>
+      <td${barAttr} data-product-id="${escHtml(pid)}" data-col="${escHtml(f.key)}">${escHtml(formatted)}${badge}</td>
     </tr>`;
   }).join('');
 
   // Compact fields (extended attributes)
   const compactRowsHtml = getExtendedCompactFields()
-    .filter((cf) => isCompactFieldVisible(cf, row))
+    .filter((cf) => isCompactFieldVisible(cf, row!))
     .map((cf) => {
-      const html = cf.formatRow(row);
+      const html = cf.formatRow(row!);
       if (html == null) return '';
       const colIds = JSON.stringify(cf.sourceKeys);
       return `<tr>
-        <td>${esc(t(cf.labelKey))}</td>
-        <td class="embed-value-cell embed-compact-cell" data-product-id="${esc(productId)}" data-compact-cols='${esc(colIds)}'>${html}</td>
+        <td class="product-label-cell">${escHtml(t(cf.labelKey))}</td>
+        <td class="product-value-cell product-compact-cell" data-product-id="${escHtml(pid)}" data-compact-cols='${escHtml(colIds)}'>${html}</td>
       </tr>`;
     }).join('');
 
-  // Interaction hint (same modality detection as the main app)
+  // Search URLs
+  const searchQuery = `${brandLabel} ${row.product_name}`.trim();
+  const lang = getLocale() === 'ja' ? 'ja' : 'en';
+  const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+  const frieveQ = searchQuery.split(/\s+/).map(encodeURIComponent).join('+');
+  const frieveUrl = `https://audioreview.frieve.com/search/${lang}/?q=${frieveQ}`;
+  const amazonUrl = getLocale() === 'ja'
+    ? `https://www.amazon.co.jp/s?k=${encodeURIComponent(searchQuery)}&tag=frieve02-22`
+    : `https://www.amazon.com/s?k=${encodeURIComponent(searchQuery)}&tag=frieve-20`;
+
+  // Interaction hint
   const hintKey = getInteractionHintKey();
   const hintText = t(hintKey);
 
-  // Compare link
-  const compareUrl = `https://audiospecs.frieve.com/compare?ids=${encodeURIComponent(productId)}`;
-  const openText = t('embed.open_in_audiospecs');
-  const poweredText = 'Powered by AudioSpecs';
+  // SVG icons (same as compare/explore)
+  const googleSvg = '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>';
+  const amazonSvg = '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M6.61 11.802c0-1.005.247-1.863.743-2.577.495-.71 1.17-1.25 2.04-1.615.796-.335 1.756-.575 2.912-.72.39-.046 1.033-.103 1.92-.174v-.37c0-.93-.105-1.558-.3-1.875-.302-.43-.78-.65-1.44-.65h-.182c-.48.046-.896.196-1.246.46-.35.27-.575.63-.675 1.096-.06.3-.206.465-.435.51l-2.52-.315c-.248-.06-.372-.18-.372-.39 0-.046.007-.09.022-.15.247-1.29.855-2.25 1.82-2.88.976-.616 2.1-.975 3.39-1.05h.54c1.65 0 2.957.434 3.888 1.29.135.15.27.3.405.48.12.165.224.314.283.45.075.134.15.33.195.57.06.254.105.42.135.51.03.104.062.3.076.615.01.313.02.493.02.553v5.28c0 .376.06.72.165 1.036.105.313.21.54.315.674l.51.674c.09.136.136.256.136.36 0 .12-.06.226-.18.314-1.2 1.05-1.86 1.62-1.963 1.71-.165.135-.375.15-.63.045a6.062 6.062 0 01-.526-.496l-.31-.347a9.391 9.391 0 01-.317-.42l-.3-.435c-.81.886-1.603 1.44-2.4 1.665-.494.15-1.093.227-1.83.227-1.11 0-2.04-.343-2.76-1.034-.72-.69-1.08-1.665-1.08-2.94l-.05-.076zm3.753-.438c0 .566.14 1.02.425 1.364.285.34.675.512 1.155.512.045 0 .106-.007.195-.02.09-.016.134-.023.166-.023.614-.16 1.08-.553 1.424-1.178.165-.28.285-.58.36-.91.09-.32.12-.59.135-.8.015-.195.015-.54.015-1.005v-.54c-.84 0-1.484.06-1.92.18-1.275.36-1.92 1.17-1.92 2.43l-.035-.02z"/><path fill="#FF9900" d="M.045 18.02c.072-.116.187-.124.348-.022 3.636 2.11 7.594 3.166 11.87 3.166 2.852 0 5.668-.533 8.447-1.595l.315-.14c.138-.06.234-.1.293-.13.226-.088.39-.046.525.13.12.174.09.336-.12.48-.256.19-.6.41-1.006.654-1.244.743-2.64 1.316-4.185 1.726a17.617 17.617 0 01-10.951-.577 17.88 17.88 0 01-5.43-3.35c-.1-.074-.151-.15-.151-.22 0-.047.021-.09.051-.13z"/><path fill="#FF9900" d="M19.525 18.448c.03-.06.075-.11.132-.17.362-.243.714-.41 1.05-.5a8.094 8.094 0 011.612-.24c.14-.012.28 0 .41.03.65.06 1.05.168 1.172.33.063.09.099.228.099.39v.15c0 .51-.149 1.11-.424 1.8-.278.69-.664 1.248-1.156 1.68-.073.06-.14.09-.197.09-.03 0-.06 0-.09-.012-.09-.044-.107-.12-.064-.24.54-1.26.806-2.143.806-2.64 0-.15-.03-.27-.087-.344-.145-.166-.55-.257-1.224-.257-.243 0-.533.016-.87.046-.363.045-.7.09-1 .135-.09 0-.148-.014-.18-.044-.03-.03-.036-.047-.02-.077 0-.017.006-.03.02-.063v-.06z"/></svg>';
 
   container.innerHTML = `
-    <div class="embed-header">
-      <span class="embed-category-badge" data-cat="${esc(category)}">${esc(categoryLabel)}</span>
-      <div class="embed-brand">${esc(brandLabel)}</div>
-      <div class="embed-product">${esc(productLabel)}</div>
+    <div class="view-header product-header">
+      <h1>${escHtml(brandLabel)} <span class="product-header-name">${escHtml(productLabel)}</span> <span class="chip cat-${escHtml(category)}">${escHtml(categoryLabel)}</span></h1>
+    </div>
+    <div class="product-actions">
+      <button id="product-add-compare">+ ${escHtml(t('product.add_to_compare'))}</button>
+      <a href="${googleUrl}" target="_blank" rel="noopener" class="product-search-link">${googleSvg} ${escHtml(t('analysis.ctx.search_google'))}</a>
+      <a href="${frieveUrl}" target="_blank" rel="noopener" class="product-search-link">\u{1F3A7} ${escHtml(t('analysis.ctx.search_frieve'))}</a>
+      <a href="${amazonUrl}" target="_blank" rel="noopener" class="product-search-link">${amazonSvg} ${escHtml(t('analysis.ctx.search_amazon'))}</a>
     </div>
     ${frHtml}
-    <div class="embed-data-section">
-      <h3 class="embed-section-title">${esc(t('embed.related_data'))}</h3>
-      <div class="embed-hint">${esc(hintText)}</div>
-      <table class="embed-spec-table">
-        <tbody>${rowsHtml}${compactRowsHtml}</tbody>
-      </table>
+    <div class="card">
+      <div class="card-body">
+        <h3 style="margin:0 0 0.5rem">${escHtml(t('product.specifications'))}</h3>
+        <div class="product-hint">${escHtml(hintText)}</div>
+        <div class="product-spec-table-wrap">
+          <table class="product-spec-table">
+            <tbody>
+              ${rowsHtml}${compactRowsHtml}
+              <tr>
+                <td class="product-label-cell">${escHtml(t('compare.field.sources'))}</td>
+                <td class="product-value-cell" id="product-all-sources">…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-    <div class="embed-footer">
-      <a class="embed-open-link" href="${compareUrl}" target="_blank" rel="noopener">${esc(openText)}</a>
-      <div class="embed-powered">${poweredText}</div>
-    </div>`;
+  `;
 
-  // Wire up field description tooltips (? help icons)
+  // ── Add to compare button ──
+  document.getElementById('product-add-compare')!.addEventListener('click', () => {
+    let ids: string[] = [];
+    try { ids = JSON.parse(sessionStorage.getItem('compare_ids') || '[]'); } catch { /* empty */ }
+    if (!ids.includes(pid)) {
+      if (ids.length >= 20) return;
+      ids.push(pid);
+      sessionStorage.setItem('compare_ids', JSON.stringify(ids));
+    }
+    navigate('compare', { ids: ids.join(',') });
+  });
+
+  // ── Tooltips ──
   setupColHelpTooltips(container);
-
-  // Wire up measured badge tooltips
   setupMeasuredBadgeTooltips(container);
 
-  // Wire up source context menu (right-click / long-press) on value cells
+  // ── Source context menu on value cells ──
   setupSourceContextMenu(container);
   setupSourceMenuDismiss();
 
@@ -363,7 +403,7 @@ export async function renderEmbedSpec(
   if (hasFr) {
     const frRows = await query<{ product_id: string; series_type: string; points_json: string }>(
       `SELECT product_id, series_type, points_json FROM web_fr_data WHERE product_id = ?`,
-      [productId],
+      [pid],
     );
     const fr = frRows.find((r) => r.series_type === 'raw') ?? frRows[0];
     if (fr) {
@@ -377,41 +417,47 @@ export async function renderEmbedSpec(
         hovertemplate: '%{x:.0f} Hz: %{y:.1f} dB<extra></extra>',
       };
 
-      const cc = embedChartColors();
+      const baseFontPx = 16;
+      const currentFontPx = parseFloat(getComputedStyle(document.documentElement).fontSize || `${baseFontPx}`);
+      const fontScale = Number.isFinite(currentFontPx) ? currentFontPx / baseFontPx : 1.25;
+
+      const cc = chartColors();
       const layout: Partial<Layout> = {
         xaxis: {
-          title: { text: t('compare.fr.xaxis'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
+          title: { text: t('compare.fr.xaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale },
           type: 'log',
           gridcolor: cc.gridcolor,
           zerolinecolor: cc.zerolinecolor,
         },
         yaxis: {
-          title: { text: t('compare.fr.yaxis'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
+          title: { text: t('compare.fr.yaxis'), font: { family: 'Inter, sans-serif', size: 13 * fontScale, color: cc.axisTitleColor }, standoff: 10 * fontScale },
           gridcolor: cc.gridcolor,
           zerolinecolor: cc.zerolinecolor,
         },
         paper_bgcolor: cc.paper_bgcolor,
         plot_bgcolor: cc.plot_bgcolor,
-        font: { family: 'sans-serif', size: 11, ...(cc.fontColor ? { color: cc.fontColor } : {}) },
-        margin: { l: 50, r: 16, t: 8, b: 45 },
+        font: { family: 'Inter, sans-serif', size: 12 * fontScale, ...(cc.fontColor ? { color: cc.fontColor } : {}) },
+        margin: { l: 60 * fontScale, r: 20 * fontScale, t: 10 * fontScale, b: 55 * fontScale },
         showlegend: false,
         hovermode: 'x unified',
       };
 
       const plotConfig: Partial<Config> = {
         responsive: true,
-        displayModeBar: false,
-        staticPlot: false,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+        displaylogo: false,
+        toImageButtonOptions: { scale: 2 },
       };
 
-      await Plotly.react('embed-fr-plot', [trace], layout, plotConfig);
+      await Plotly.react('product-fr-plot', [trace], layout, plotConfig);
     }
 
-    // Populate FR source URLs
-    const frSourcesEl = container.querySelector<HTMLElement>('#embed-fr-sources');
+    // FR source URLs
+    const frSourcesEl = container.querySelector<HTMLElement>('#product-fr-sources');
     if (frSourcesEl) {
       frSourcesEl.textContent = '…';
-      fetchSourceUrls(productId, ['fr_data']).then((urls) => {
+      fetchSourceUrls(pid, ['fr_data']).then((urls) => {
         if (!document.body.contains(frSourcesEl)) return;
         if (urls.length === 0) { frSourcesEl.textContent = ''; return; }
         frSourcesEl.textContent = '';
@@ -437,9 +483,26 @@ export async function renderEmbedSpec(
     }
   }
 
-  // Notify parent of content height for auto-resize
-  notifySize();
-  observeSize();
+  // ── All source URLs (same rendering as Compare tab) ──
+  const allSourcesEl = container.querySelector<HTMLElement>('#product-all-sources');
+  if (allSourcesEl) {
+    fetchAllSourceUrls(pid).then((urls) => {
+      if (!document.body.contains(allSourcesEl)) return;
+      if (urls.length === 0) { allSourcesEl.textContent = '—'; return; }
+      allSourcesEl.textContent = '';
+      for (const url of urls) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        try { a.textContent = new URL(url).hostname; } catch { a.textContent = url; }
+        a.title = url;
+        allSourcesEl.appendChild(a);
+      }
+    }).catch(() => {
+      if (document.body.contains(allSourcesEl)) allSourcesEl.textContent = '—';
+    });
+  }
 }
 
 /** Detect input modality and return the i18n key for the interaction hint. */
@@ -461,13 +524,11 @@ function getInteractionHintKey(): string {
 
 /** Wire up right-click / long-press source context menu on value cells. */
 function setupSourceContextMenu(container: HTMLElement): void {
-  container.querySelectorAll<HTMLElement>('.embed-value-cell[data-product-id][data-col]').forEach((cell) => {
-    // Right-click
+  container.querySelectorAll<HTMLElement>('.product-value-cell[data-product-id][data-col]').forEach((cell) => {
     cell.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       showSourceMenu(e.clientX, e.clientY, cell.dataset.productId!, [cell.dataset.col!]);
     });
-    // Long-press (touch)
     let longTapTimer: ReturnType<typeof setTimeout> | null = null;
     cell.addEventListener('touchstart', (ev) => {
       longTapTimer = setTimeout(() => {
@@ -480,8 +541,7 @@ function setupSourceContextMenu(container: HTMLElement): void {
     cell.addEventListener('touchmove', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
   });
 
-  // Compact cells (sourceKeys stored in data attribute)
-  container.querySelectorAll<HTMLElement>('.embed-compact-cell[data-product-id][data-compact-cols]').forEach((cell) => {
+  container.querySelectorAll<HTMLElement>('.product-compact-cell[data-product-id][data-compact-cols]').forEach((cell) => {
     const colIds: string[] = JSON.parse(cell.dataset.compactCols!);
     cell.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -499,25 +559,3 @@ function setupSourceContextMenu(container: HTMLElement): void {
     cell.addEventListener('touchmove', () => { if (longTapTimer) { clearTimeout(longTapTimer); longTapTimer = null; } });
   });
 }
-
-/** Post content dimensions to the parent window for iframe auto-resize. */
-function notifySize(): void {
-  try {
-    const height = document.documentElement.scrollHeight;
-    const width = document.documentElement.scrollWidth;
-    window.parent.postMessage({ type: 'audiospecs-embed-resize', height, width }, '*');
-  } catch {
-    // ignore if cross-origin parent blocks postMessage
-  }
-}
-
-// Observe body size changes (tooltips, source menus, dynamic content)
-let sizeObserver: ResizeObserver | null = null;
-function observeSize(): void {
-  if (sizeObserver) return;
-  sizeObserver = new ResizeObserver(() => notifySize());
-  sizeObserver.observe(document.documentElement);
-}
-
-// Also notify on window resize
-window.addEventListener('resize', () => notifySize());

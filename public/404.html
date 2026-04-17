@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <script>
+    // GitHub Pages SPA redirect: preserve path + query for client-side routing.
+    // Encodes the path into a query parameter so index.html can restore it.
+    var path = window.location.pathname;
+    var search = window.location.search;
+    var hash = window.location.hash;
+    window.location.replace('/?p=' + encodeURIComponent(path + search) + (hash || ''));
+  </script>
+</head>
+<body></body>
+</html>

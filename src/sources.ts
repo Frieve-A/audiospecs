@@ -72,7 +72,10 @@ export function columnToPatterns(colId: string): string[] {
     'is_in_ear': ['spec.design.is_in_ear'],
     // Extended attributes — cable
     'cable_is_detachable': ['spec.cable.is_detachable'],
-    'cable_plug_mm': ['spec.cable.plug_mm'],
+    'cable_plug_2_5mm': ['spec.cable.plug_2_5mm'],
+    'cable_plug_3_5mm': ['spec.cable.plug_3_5mm'],
+    'cable_plug_4_4mm': ['spec.cable.plug_4_4mm'],
+    'cable_plug_6_35mm': ['spec.cable.plug_6_35mm'],
     'cable_length_m': ['spec.cable.length_m'],
     'cable_has_balanced_option': ['spec.cable.has_balanced_option'],
     'cable_socket_2pin': ['spec.cable.socket_2pin'],
@@ -115,7 +118,6 @@ export function columnToPatterns(colId: string): string[] {
     'width_mm': ['spec.physical.width_mm'],
     'height_mm': ['spec.physical.height_mm'],
     'depth_mm': ['spec.physical.depth_mm'],
-    'driver_size_mm': ['spec.physical.driver_size_mm', 'spec.driver.size_mm'],
     // Extended attributes — features
     'has_anc': ['spec.feature.has_anc'],
     'has_transparency_mode': ['spec.feature.has_transparency_mode'],
@@ -130,7 +132,7 @@ export function columnToPatterns(colId: string): string[] {
     'has_galvanic_isolation': ['spec.feature.has_galvanic_isolation'],
     // Extended attributes — driver / enclosure
     'driver_type': ['spec.driver.type'],
-    'driver_diameter_mm': ['spec.driver.diameter_mm'],
+    'driver_sizes_mm': ['spec.physical.driver_size_mm', 'spec.driver.size_mm', 'spec.driver.diameter_mm'],
     'driver_diaphragm_material': ['spec.driver.diaphragm_material'],
     'driver_magnet_material': ['spec.driver.magnet_material'],
     'enclosure_is_vented': ['spec.enclosure.is_vented'],

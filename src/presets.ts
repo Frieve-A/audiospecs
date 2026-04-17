@@ -103,6 +103,26 @@ export const AXES: AxisDef[] = [
   { id: 'line_output_impedance_ohm', source: 'line_output_impedance_ohm', label: 'Line Output Impedance (Ω)', scale: 'log', better: 'lower' },
   { id: 'line_output_impedance_ohm_measured', source: 'line_output_impedance_ohm_measured', label: 'Line Output Impedance measured (Ω)', scale: 'log', better: 'lower' },
   { id: 'line_output_impedance_ohm_spec', source: 'line_output_impedance_ohm_spec', label: 'Line Output Impedance spec (Ω)', scale: 'log', better: 'lower' },
+  // Extended attributes
+  { id: 'bluetooth_version', source: 'bluetooth_version', label: 'BT Version', scale: 'linear', better: 'higher' },
+  { id: 'wireless_range_m', source: 'wireless_range_m', label: 'Wireless Range (m)', scale: 'log', better: 'higher' },
+  { id: 'dac_bit_depth', source: 'dac_bit_depth', label: 'Bit Depth', scale: 'log', better: 'higher' },
+  { id: 'dac_sample_rate_max_khz', source: 'dac_sample_rate_max_khz', label: 'Max Sample Rate (kHz)', scale: 'log', better: 'higher' },
+  { id: 'dac_channels', source: 'dac_channels', label: 'DAC Channels', scale: 'linear' },
+  { id: 'dsd_max_level', source: 'dsd_max_level', label: 'Max DSD Format', scale: 'log', better: 'higher' },
+  { id: 'battery_life_hours', source: 'battery_life_hours', label: 'Battery Life (h)', scale: 'log', better: 'higher' },
+  { id: 'battery_life_hours_anc_on', source: 'battery_life_hours_anc_on', label: 'Battery (ANC) (h)', scale: 'log', better: 'higher' },
+  { id: 'battery_total_life_hours', source: 'battery_total_life_hours', label: 'Total Battery (h)', scale: 'log', better: 'higher' },
+  { id: 'battery_capacity_mah', source: 'battery_capacity_mah', label: 'Battery Capacity (mAh)', scale: 'log' },
+  { id: 'battery_charge_time_hours', source: 'battery_charge_time_hours', label: 'Charge Time (h)', scale: 'log', better: 'lower' },
+  { id: 'width_mm', source: 'width_mm', label: 'Width (mm)', scale: 'log' },
+  { id: 'height_mm', source: 'height_mm', label: 'Height (mm)', scale: 'log' },
+  { id: 'depth_mm', source: 'depth_mm', label: 'Depth (mm)', scale: 'log' },
+  { id: 'driver_size_max_mm', source: "json_extract(driver_sizes_mm, '$[#-1]')", label: 'Max Driver Size (mm)', scale: 'log' },
+  { id: 'cable_length_m', source: 'cable_length_m', label: 'Cable Length (m)', scale: 'log' },
+  { id: 'power_consumption_w', source: 'power_consumption_w', label: 'Power Consumption (W)', scale: 'log', better: 'lower' },
+  { id: 'connector_count_input', source: 'connector_count_input', label: 'Input Types', scale: 'linear', better: 'higher' },
+  { id: 'connector_count_output', source: 'connector_count_output', label: 'Output Types', scale: 'linear', better: 'higher' },
 ];
 
 export const PRESETS: Preset[] = [
@@ -194,6 +214,25 @@ const FIXED_MEASURED_AXES = new Set<string>([
 const FIXED_SPEC_AXES = new Set<string>([
   'weight_g',
   'driver_total_count',
+  'bluetooth_version',
+  'wireless_range_m',
+  'dac_bit_depth',
+  'dac_sample_rate_max_khz',
+  'dac_channels',
+  'dsd_max_level',
+  'battery_life_hours',
+  'battery_life_hours_anc_on',
+  'battery_total_life_hours',
+  'battery_capacity_mah',
+  'battery_charge_time_hours',
+  'width_mm',
+  'height_mm',
+  'depth_mm',
+  'driver_size_max_mm',
+  'cable_length_m',
+  'power_consumption_w',
+  'connector_count_input',
+  'connector_count_output',
 ]);
 
 /** True if the given base axis has both `_measured` and `_spec` sibling variants in AXES. */

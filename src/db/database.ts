@@ -43,8 +43,11 @@ function send(type: string, payload: Record<string, unknown> = {}, timeoutMs = 3
 }
 
 export async function initDatabase(): Promise<void> {
-  const dbUrl = new URL('./audiodb.web.sqlite', window.location.href).href;
-  const wasmUrl = new URL('./sql-wasm.wasm', window.location.href).href;
+  // Resolve relative to the site origin (not current href) so that nested
+  // routes like /product/brand/name don't break the asset paths.
+  const base = window.location.origin + '/';
+  const dbUrl = new URL('./audiodb.web.sqlite', base).href;
+  const wasmUrl = new URL('./sql-wasm.wasm', base).href;
   await send('init', { dbUrl, wasmUrl });
 }
 

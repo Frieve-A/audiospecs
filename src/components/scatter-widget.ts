@@ -409,6 +409,7 @@ export async function renderScatterWidget(
     const menu = document.createElement('div');
     menu.className = 'scatter-ctx-menu';
     menu.innerHTML = `
+      <button data-action="details">${t('analysis.ctx.details')}</button>
       <button data-action="compare">${t('analysis.ctx.add_compare')}</button>
       <button data-action="google">${t('analysis.ctx.search_google')}</button>
       <button data-action="frieve">${t('analysis.ctx.search_frieve')}</button>
@@ -423,6 +424,14 @@ export async function renderScatterWidget(
     if (rect.bottom > window.innerHeight) menu.style.top = `${window.innerHeight - rect.height - 8}px`;
 
     const searchQuery = `${row.brand_label} ${row.product_name}`.trim();
+
+    menu.querySelector('[data-action="details"]')!.addEventListener('click', () => {
+      document.querySelector('.scatter-ctx-menu')?.remove();
+      const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      const url = `/product/${slug(row.brand_label || 'unknown')}/${slug(row.product_name)}`;
+      history.pushState(null, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
 
     menu.querySelector('[data-action="compare"]')!.addEventListener('click', () => {
       document.querySelector('.scatter-ctx-menu')?.remove();
