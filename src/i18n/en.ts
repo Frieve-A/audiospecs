@@ -328,6 +328,10 @@ export const en: Record<string, string> = {
   'compare.fr.target_curve_tip': 'Overlay the Harman target curve used as the reference for FR deviation. Over-ear products use Harman OE 2018; IEMs use Harman IE 2019.',
   'compare.fr.deviation': 'Deviation',
   'compare.fr.deviation_tip': 'Switch to deviation view: each product\'s FR minus the Harman target curve. The target becomes a flat 0 dB reference line.',
+  'compare.fr.remove_offset': 'Remove Offset',
+  'compare.fr.remove_offset_tip': 'Subtract a constant offset from each product\'s FR so the equal-weight RMS over 80 Hz–8 kHz (log scale) is minimised relative to the target curve.',
+  'compare.fr.peakdip': 'Peak/Dip',
+  'compare.fr.peakdip_tip': 'Show all detected local peaks (▼ markers above the curve) and dips (▲ markers below the curve) in the error signal after removing the macro trend. Prominence and width are shown on hover.',
 
   // Product detail page
   'page.title.product': 'Product — Frieve - AudioSpecs',

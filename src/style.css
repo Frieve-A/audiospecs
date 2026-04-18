@@ -1757,6 +1757,98 @@ table.data-table .numeric {
 .fr-sources-row {
   line-height: 1.6;
 }
+
+.fr-narration {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #e0e0e0);
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--text-secondary, #555);
+}
+.fr-narration-summary {
+  margin-bottom: 0.75rem;
+}
+.fr-narration-para {
+  margin: 0 0 0.35rem;
+}
+.fr-narration-para:last-child {
+  margin-bottom: 0;
+}
+.fr-narration-bands {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+}
+.fr-narration-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #999);
+  line-height: 1.5;
+}
+.fr-band-row {
+  display: table-row;
+}
+.fr-band-row + .fr-band-row .fr-band-label,
+.fr-band-row + .fr-band-row .fr-band-value,
+.fr-band-row + .fr-band-row .fr-band-text {
+  border-top: 1px solid var(--border, #e0e0e0);
+}
+.fr-band-label,
+.fr-band-value,
+.fr-band-text {
+  display: table-cell;
+  padding: 0.2rem 0.5rem 0.2rem 0;
+  vertical-align: top;
+}
+.fr-band-label {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary, #888);
+  min-width: 7rem;
+}
+.fr-band-value {
+  font-variant-numeric: tabular-nums;
+  padding: 0.2rem 0.75rem 0.2rem 0;
+  vertical-align: middle;
+}
+.fr-gauge-wrap {
+  display: inline-block;
+  position: relative;
+  width: 120px;
+  height: 16px;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+.fr-gauge-bar {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 1px;
+}
+.fr-gauge-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.fr-band-num {
+  display: inline-block;
+  min-width: 4.5rem;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text-secondary, #555);
+}
+.fr-band-pos.fr-band-sev-slight .fr-band-num { color: #c05050; }
+.fr-band-pos.fr-band-sev-clear  .fr-band-num { color: #a01010; }
+.fr-band-pos.fr-band-sev-severe .fr-band-num { color: #800000; }
+.fr-band-neg.fr-band-sev-slight .fr-band-num { color: #5060c0; }
+.fr-band-neg.fr-band-sev-clear  .fr-band-num { color: #1030a0; }
+.fr-band-neg.fr-band-sev-severe .fr-band-num { color: #002070; }
+.fr-band-text {
+  color: var(--text-secondary, #555);
+}
 .fr-sources-row a {
   color: var(--accent);
   text-decoration: none;
@@ -2046,6 +2138,14 @@ tr.explore-row:hover td,
   color: var(--text-secondary, #555);
   margin: 1rem 0 0.25rem;
   padding-left: 0.25rem;
+}
+
+.ranking-bar-desc {
+  font-size: 0.8rem;
+  color: var(--text-tertiary, #888);
+  margin: 0 0 0.25rem;
+  padding-left: 0.25rem;
+  line-height: 1.4;
 }
 
 .ranking-bar-list {

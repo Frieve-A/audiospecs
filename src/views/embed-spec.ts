@@ -13,7 +13,7 @@ import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from
 import { setupColHelpTooltips } from '../components/col-help';
 import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls } from '../sources';
 import { getExtendedCompactFields, isCompactFieldVisible, formatHzUnit, formatDbSigned } from '../format-utils';
-import { buildTargetTrace } from '../target-curves';
+import { applyFrOffset, buildTargetTrace, computeFrOffset } from '../target-curves';
 
 /* ── Theme helper for chart colors ── */
 
@@ -369,7 +369,8 @@ export async function renderEmbedSpec(
     );
     const fr = frRows.find((r) => r.series_type === 'raw') ?? frRows[0];
     if (fr) {
-      const points: [number, number][] = JSON.parse(fr.points_json);
+      const rawPoints: [number, number][] = JSON.parse(fr.points_json);
+      const points = applyFrOffset(rawPoints, computeFrOffset(rawPoints, category));
       const productTrace: Data = {
         x: points.map((p) => p[0]),
         y: points.map((p) => p[1]),

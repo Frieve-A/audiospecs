@@ -11,13 +11,17 @@ import { chartColors } from '../theme';
 import { sig3 as _sig3, formatHz as _formatHz, escHtml as _escHtml, getExtendedCompactFields, isCompactFieldVisible, type CompactField, formatHzUnit, formatDbSigned } from '../format-utils';
 import { getRankingAxes, createRankingSection } from '../components/ranking-bar-widget';
 import { setupViewportTable } from '../components/viewport-table';
-import { buildTargetTrace, getTargetCurveLabel, rawToDeviation } from '../target-curves';
+import { applyFrOffset, buildTargetTrace, computeFrOffset, getTargetCurveLabel, rawToDeviation } from '../target-curves';
 
 let cleanupDocListener: (() => void) | null = null;
 let cleanupViewportTable: (() => void) | null = null;
 
 const STORAGE_KEY = 'compare_ids';
 const SPLIT_STORAGE_KEY = 'compare_split_measured';
+const FR_TARGET_KEY = 'fr_show_target';
+const FR_DEVIATION_KEY = 'fr_show_deviation';
+const FR_OFFSET_KEY = 'fr_remove_offset';
+const FR_PEAKDIP_KEY = 'fr_show_peakdip';
 
 export const MAX_COMPARE_PRODUCTS = 20;
 
@@ -34,7 +38,7 @@ function saveIds(ids: string[]): void {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
 }
 
-function loadSplit(): boolean {
+export function loadSplit(): boolean {
   try {
     return localStorage.getItem(SPLIT_STORAGE_KEY) === '1';
   } catch {
@@ -42,13 +46,35 @@ function loadSplit(): boolean {
   }
 }
 
-function saveSplit(v: boolean): void {
+export function saveSplit(v: boolean): void {
   try {
     localStorage.setItem(SPLIT_STORAGE_KEY, v ? '1' : '0');
   } catch {
     // ignore
   }
 }
+
+function lsBool(key: string, def: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key);
+    if (v === null) return def;
+    return v === '1';
+  } catch {
+    return def;
+  }
+}
+function lsSaveBool(key: string, v: boolean): void {
+  try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* ignore */ }
+}
+
+export function loadFrTarget(): boolean { return lsBool(FR_TARGET_KEY, true); }
+export function saveFrTarget(v: boolean): void { lsSaveBool(FR_TARGET_KEY, v); }
+export function loadFrDeviation(): boolean { return lsBool(FR_DEVIATION_KEY, false); }
+export function saveFrDeviation(v: boolean): void { lsSaveBool(FR_DEVIATION_KEY, v); }
+export function loadFrOffset(): boolean { return lsBool(FR_OFFSET_KEY, true); }
+export function saveFrOffset(v: boolean): void { lsSaveBool(FR_OFFSET_KEY, v); }
+export function loadFrPeakDip(): boolean { return lsBool(FR_PEAKDIP_KEY, true); }
+export function saveFrPeakDip(v: boolean): void { lsSaveBool(FR_PEAKDIP_KEY, v); }
 
 /**
  * Filter compare fields based on the "split spec/measured" mode.
@@ -361,14 +387,18 @@ export async function renderCompare(
       .filter((r) => r.has_fr_data === 1)
       .map((r) => r.product_id as string);
 
+    const frInitTarget = loadFrTarget();
+    const frInitDev = loadFrDeviation();
+    const frInitOffset = loadFrOffset();
     let frHtml = '';
     if (frProductIds.length > 0) {
       frHtml = `
         <div class="card" style="margin-bottom:1rem">
           <div class="card-body">
             <h3 style="margin:0 0 0.5rem">${t('compare.fr.title')}</h3>
-            <span class="fr-toggles"><span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="compare-fr-target-cb" checked> ${_escHtml(t('compare.fr.target_curve'))}</label><span class="col-help" data-tooltip="${_escHtml(t('compare.fr.target_curve_tip'))}">?</span></span>
-            <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="compare-fr-deviation-cb"> ${_escHtml(t('compare.fr.deviation'))}</label><span class="col-help" data-tooltip="${_escHtml(t('compare.fr.deviation_tip'))}">?</span></span></span>
+            <span class="fr-toggles"><span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="compare-fr-target-cb"${frInitTarget ? ' checked' : ''}> ${_escHtml(t('compare.fr.target_curve'))}</label><span class="col-help" data-tooltip="${_escHtml(t('compare.fr.target_curve_tip'))}">?</span></span>
+            <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="compare-fr-deviation-cb"${frInitDev ? ' checked' : ''}> ${_escHtml(t('compare.fr.deviation'))}</label><span class="col-help" data-tooltip="${_escHtml(t('compare.fr.deviation_tip'))}">?</span></span>
+            <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="compare-fr-offset-cb"${frInitOffset ? ' checked' : ''}> ${_escHtml(t('compare.fr.remove_offset'))}</label><span class="col-help" data-tooltip="${_escHtml(t('compare.fr.remove_offset_tip'))}">?</span></span></span>
             <div id="compare-fr-plot" style="width:100%;height:400px"></div>
             <div id="compare-fr-sources" class="fr-sources-row" style="margin-top:0.5rem;font-size:13px;color:var(--text-secondary, #666)"></div>
           </div>
@@ -471,7 +501,15 @@ export async function renderCompare(
       const TRACE_DASHES = ['solid', 'dot', 'dash', 'dashdot', 'longdash'] as const;
 
       // Collect raw and deviation points per product
-      interface FrEntry { rawPts: [number, number][]; devPts: [number, number][]; name: string; colorIdx: number; dashIdx: number; }
+      interface FrEntry {
+        rawPts: [number, number][];
+        offsetPts: [number, number][];
+        devPts: [number, number][];
+        offsetDevPts: [number, number][];
+        name: string;
+        colorIdx: number;
+        dashIdx: number;
+      }
       const frEntries: FrEntry[] = [];
       const frCategories = new Set<string>();
 
@@ -483,10 +521,15 @@ export async function renderCompare(
         const cat = ordered[i].category_primary as string;
         frCategories.add(cat);
         const rawPts: [number, number][] = JSON.parse(fr.points_json);
+        const offset = computeFrOffset(rawPts, cat);
+        const offsetPts = applyFrOffset(rawPts, offset);
         const devPts = rawToDeviation(rawPts, cat);
+        const offsetDevPts = rawToDeviation(offsetPts, cat);
         frEntries.push({
           rawPts,
+          offsetPts,
           devPts,
+          offsetDevPts,
           name: `${ordered[i].brand_label} ${productDisplayName(ordered[i] as unknown as { product_name: string; variant?: string })}`,
           colorIdx: i % TRACE_COLORS.length,
           dashIdx: Math.floor(i / TRACE_COLORS.length) % TRACE_DASHES.length,
@@ -542,9 +585,11 @@ export async function renderCompare(
           toImageButtonOptions: { scale: 2 },
         };
 
-        const renderCompareFr = (showTarget: boolean, showDeviation: boolean) => {
+        const renderCompareFr = (showTarget: boolean, showDeviation: boolean, removeOffset: boolean) => {
           const productTraces: Data[] = frEntries.map((e) => {
-            const pts = showDeviation ? e.devPts : e.rawPts;
+            const pts = showDeviation
+              ? (removeOffset ? e.offsetDevPts : e.devPts)
+              : (removeOffset ? e.offsetPts : e.rawPts);
             return {
               x: pts.map((p) => p[0]),
               y: pts.map((p) => p[1]),
@@ -584,19 +629,26 @@ export async function renderCompare(
           Plotly.react('compare-fr-plot', allTraces, layout, plotConfig);
         };
 
-        renderCompareFr(true, false);
+        renderCompareFr(frInitTarget, frInitDev, frInitOffset);
 
         // Wire up toggles
         const targetCb = contentEl.querySelector<HTMLInputElement>('#compare-fr-target-cb');
         const devCb = contentEl.querySelector<HTMLInputElement>('#compare-fr-deviation-cb');
+        const offsetCb = contentEl.querySelector<HTMLInputElement>('#compare-fr-offset-cb');
+        if (targetCb) targetCb.disabled = frInitDev;
         const updateCompareFr = () => {
           const showDev = devCb?.checked ?? false;
           const showTarget = targetCb?.checked ?? true;
+          const removeOffset = offsetCb?.checked ?? true;
           if (targetCb) targetCb.disabled = showDev;
-          renderCompareFr(showTarget, showDev);
+          saveFrTarget(showTarget);
+          saveFrDeviation(showDev);
+          saveFrOffset(removeOffset);
+          renderCompareFr(showTarget, showDev, removeOffset);
         };
         if (targetCb) targetCb.addEventListener('change', updateCompareFr);
         if (devCb) devCb.addEventListener('change', updateCompareFr);
+        if (offsetCb) offsetCb.addEventListener('change', updateCompareFr);
 
         // Rewrite unified hover header to show formatted frequency
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -828,6 +880,8 @@ export async function renderCompare(
           catProducts,
           highlights,
           `${t('product.rankings')} — ${getCategoryLabel(cat)}`,
+          undefined,
+          true,
         );
       }
     }

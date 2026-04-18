@@ -328,6 +328,10 @@ export const ja: Record<string, string> = {
   'compare.fr.target_curve_tip': 'FR偏差の基準となるHarmanターゲットカーブを重ねて表示します。オーバーイヤー製品はHarman OE 2018、IEMはHarman IE 2019を使用。',
   'compare.fr.deviation': '偏差表示',
   'compare.fr.deviation_tip': '偏差表示に切り替えます。各製品のFRからHarmanターゲットカーブを差し引いた値を表示し、ターゲットは0 dBの基準線になります。',
+  'compare.fr.remove_offset': 'オフセット除去',
+  'compare.fr.remove_offset_tip': '80 Hz〜8 kHzの対数周波数軸上で等重みRMSが最小になるよう定数オフセットを求め、各製品のFRに適用します。',
+  'compare.fr.peakdip': 'Peak/Dip',
+  'compare.fr.peakdip_tip': 'マクロトレンドを除いた誤差信号から検出された局所ピーク（▼マーカー）とディップ（▲マーカー）を表示します。ホバーでprominenceと幅を確認できます。',
 
   // Product detail page
   'page.title.product': '製品詳細 — Frieve - AudioSpecs',

@@ -63,6 +63,28 @@ export function rawToDeviation(
 }
 
 /**
+ * Compute the constant offset that minimises equal-weight RMS of (raw - target)
+ * on the log-frequency axis 80 Hz–8 kHz (same algorithm as fr-narration.ts).
+ * Samples N log-uniform points in that range and returns their mean difference.
+ */
+export function computeFrOffset(rawPoints: [number, number][], category: string): number {
+  const target = getTargetCurve(category);
+  const N = 240;
+  const logLo = Math.log(80), logHi = Math.log(8000);
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    const f = Math.exp(logLo + (logHi - logLo) * i / (N - 1));
+    sum += interpolateTarget(rawPoints as [number, number][], f) - interpolateTarget(target, f);
+  }
+  return sum / N;
+}
+
+/** Shift all dB values in a point array by -offset (subtract the level offset). */
+export function applyFrOffset(pts: [number, number][], offset: number): [number, number][] {
+  return pts.map(([f, db]) => [f, db - offset]);
+}
+
+/**
  * Linear interpolation of a target curve at a given frequency.
  * Uses log-frequency interpolation for better accuracy on log scale.
  */

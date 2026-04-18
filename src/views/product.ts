@@ -16,8 +16,10 @@ import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls, fetchAllSource
 import { getExtendedCompactFields, isCompactFieldVisible, escHtml as _escHtml, sig3 as _sig3, formatHz as _formatHz, formatHzUnit, formatDbSigned } from '../format-utils';
 import { chartColors, isDarkTheme } from '../theme';
 import { navigate } from '../router';
+import { loadFrDeviation, loadFrOffset, loadFrPeakDip, loadFrTarget, saveFrDeviation, saveFrOffset, saveFrPeakDip, saveFrTarget, loadSplit, saveSplit } from './compare';
 import { getRankingAxes, buildRankingData, createRankingSection } from '../components/ranking-bar-widget';
-import { buildTargetTrace, rawToDeviation } from '../target-curves';
+import { applyFrOffset, buildTargetTrace, computeFrOffset, rawToDeviation } from '../target-curves';
+import { analyzeFR, type PeakDipResult } from '../components/fr-narration';
 
 /* ── Helpers (re-exported from format-utils) ── */
 
@@ -259,28 +261,55 @@ export async function renderProduct(
   // Update page title
   document.title = `${brandLabel} ${productLabel} — Frieve - AudioSpecs`;
 
-  // Filter fields: non-split mode (show "best" values only), hide nulls
-  const allFields = filterFieldsForSplitMode(getSpecFields(), false);
-  const visibleFields = allFields.filter((f) => row![f.key] != null);
+  // Split spec/measured state (shared with Compare tab via localStorage)
+  let split = loadSplit();
 
-  // Fetch global min/max for bar rendering
-  const numericKeys = visibleFields
+  // Fetch global min/max for bar rendering (all numeric fields, regardless of split mode)
+  const allSpecFields = getSpecFields();
+  const allNumericKeys = allSpecFields
     .filter((f) => typeof row![f.key] === 'number')
     .map((f) => f.key);
   const globalRange: Record<string, { min: number; max: number }> = {};
-  if (numericKeys.length > 0) {
-    const minMaxExprs = numericKeys.map((k) => {
+  if (allNumericKeys.length > 0) {
+    const minMaxExprs = allNumericKeys.map((k) => {
       const src = k === 'price_anchor_usd' ? 'coalesce(street_price_usd, msrp_usd)' : k;
       return `MIN(${src}) as "min_${k}", MAX(${src}) as "max_${k}"`;
     }).join(', ');
     const [stats] = await query<Record<string, number>>(
       `SELECT ${minMaxExprs} FROM web_product_core`,
     );
-    for (const k of numericKeys) {
+    for (const k of allNumericKeys) {
       const mn = stats[`min_${k}`];
       const mx = stats[`max_${k}`];
       if (mn != null && mx != null) globalRange[k] = { min: mn, max: mx };
     }
+  }
+
+  // Helper: build spec table rows HTML for given split mode
+  function buildSpecRowsHtml(splitMode: boolean): string {
+    const fields = filterFieldsForSplitMode(allSpecFields, splitMode)
+      .filter((f) => row![f.key] != null);
+    return fields.map((f) => {
+      const v = row![f.key];
+      const formatted = f.format(v);
+      const badge = isRowValueMeasured(row!, f.key) ? ' ' + measuredBadgeSvg() : '';
+      const descKey = `axisdesc.${f.key}`;
+      const desc = t(descKey);
+      const helpIcon = desc !== descKey ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
+      const range = globalRange[f.key];
+      let barAttr = '';
+      if (typeof v === 'number' && range) {
+        const scale = getScaleForField(f.key);
+        const pct = computeBarPercent(v, range.min, range.max, scale);
+        barAttr = ` class="product-value-cell bar-cell" style="--bar-pct:${pct.toFixed(1)}"`;
+      } else {
+        barAttr = ' class="product-value-cell"';
+      }
+      return `<tr>
+        <td class="product-label-cell">${escHtml(t(f.labelKey))}${helpIcon}</td>
+        <td${barAttr} data-product-id="${escHtml(pid)}" data-col="${escHtml(f.key)}">${escHtml(formatted)}${badge}</td>
+      </tr>`;
+    }).join('');
   }
 
   // ── Review widget (if review URL exists) ──
@@ -308,44 +337,28 @@ export async function renderProduct(
 
   // ── FR chart (if data exists) ──
   const hasFr = row.has_fr_data === 1;
+  const frInitTarget = loadFrTarget();
+  const frInitDev = loadFrDeviation();
+  const frInitOffset = loadFrOffset();
+  const frInitPeakDip = loadFrPeakDip();
   let frHtml = '';
   if (hasFr) {
     frHtml = `
       <div class="card" style="margin-bottom:1rem">
         <div class="card-body">
           <h3 style="margin:0 0 0.5rem">${escHtml(t('compare.fr.title'))}</h3>
-          <span class="fr-toggles"><span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-target-cb" checked> ${escHtml(t('compare.fr.target_curve'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.target_curve_tip'))}">?</span></span>
-          <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-deviation-cb"> ${escHtml(t('compare.fr.deviation'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.deviation_tip'))}">?</span></span></span>
+          <span class="fr-toggles"><span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-target-cb"${frInitTarget ? ' checked' : ''}> ${escHtml(t('compare.fr.target_curve'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.target_curve_tip'))}">?</span></span>
+          <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-deviation-cb"${frInitDev ? ' checked' : ''}> ${escHtml(t('compare.fr.deviation'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.deviation_tip'))}">?</span></span>
+          <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-offset-cb"${frInitOffset ? ' checked' : ''}> ${escHtml(t('compare.fr.remove_offset'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.remove_offset_tip'))}">?</span></span>
+          <span class="fr-toggle-group"><label class="fr-target-toggle"><input type="checkbox" id="product-fr-peakdip-cb"${frInitPeakDip ? ' checked' : ''}> ${escHtml(t('compare.fr.peakdip'))}</label><span class="col-help" data-tooltip="${escHtml(t('compare.fr.peakdip_tip'))}">?</span></span></span>
           <div id="product-fr-plot" style="width:100%;height:400px;overflow:hidden"></div>
           <div id="product-fr-sources" class="fr-sources-row" style="margin-top:0.5rem;font-size:13px;color:var(--text-secondary, #666)"></div>
+          <div id="product-fr-narration" class="fr-narration"></div>
         </div>
       </div>`;
   }
 
-  // Build spec rows
-  const rowsHtml = visibleFields.map((f) => {
-    const v = row![f.key];
-    const formatted = f.format(v);
-    const badge = isRowValueMeasured(row!, f.key) ? ' ' + measuredBadgeSvg() : '';
-    const descKey = `axisdesc.${f.key}`;
-    const desc = t(descKey);
-    const helpIcon = desc !== descKey ? ` <span class="col-help" data-tooltip="${escHtml(desc)}">?</span>` : '';
-    const range = globalRange[f.key];
-    let barAttr = '';
-    if (typeof v === 'number' && range) {
-      const scale = getScaleForField(f.key);
-      const pct = computeBarPercent(v, range.min, range.max, scale);
-      barAttr = ` class="product-value-cell bar-cell" style="--bar-pct:${pct.toFixed(1)}"`;
-    } else {
-      barAttr = ' class="product-value-cell"';
-    }
-    return `<tr>
-      <td class="product-label-cell">${escHtml(t(f.labelKey))}${helpIcon}</td>
-      <td${barAttr} data-product-id="${escHtml(pid)}" data-col="${escHtml(f.key)}">${escHtml(formatted)}${badge}</td>
-    </tr>`;
-  }).join('');
-
-  // Compact fields (extended attributes)
+  // Compact fields (extended attributes) — not affected by split mode
   const compactRowsHtml = getExtendedCompactFields()
     .filter((cf) => isCompactFieldVisible(cf, row!))
     .map((cf) => {
@@ -386,6 +399,10 @@ export async function renderProduct(
       <a href="${googleUrl}" target="_blank" rel="noopener" class="product-search-link">${googleSvg} ${escHtml(t('analysis.ctx.search_google'))}</a>
       ${frieveLinkHtml}
       <a href="${amazonUrl}" target="_blank" rel="noopener" class="product-search-link">${amazonSvg} ${escHtml(t('analysis.ctx.search_amazon'))}</a>
+      <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.85rem;cursor:pointer;margin-left:auto">
+        <input type="checkbox" id="product-split-measured" ${split ? 'checked' : ''}/>
+        ${escHtml(t('compare.split_spec_measured'))}
+      </label>
     </div>
     ${reviewHtml}
     ${frHtml}
@@ -395,8 +412,8 @@ export async function renderProduct(
         <div class="product-hint">${escHtml(hintText)}</div>
         <div class="product-spec-table-wrap">
           <table class="product-spec-table">
-            <tbody>
-              ${rowsHtml}${compactRowsHtml}
+            <tbody id="product-spec-tbody">
+              ${buildSpecRowsHtml(split)}${compactRowsHtml}
               <tr>
                 <td class="product-label-cell">${escHtml(t('compare.field.sources'))}</td>
                 <td class="product-value-cell" id="product-all-sources">…</td>
@@ -465,7 +482,10 @@ export async function renderProduct(
     const fr = frRows.find((r) => r.series_type === 'raw') ?? frRows[0];
     if (fr) {
       const rawPoints: [number, number][] = JSON.parse(fr.points_json);
+      const frOffset = computeFrOffset(rawPoints, category);
+      const offsetPoints = applyFrOffset(rawPoints, frOffset);
       const devPoints = rawToDeviation(rawPoints, category);
+      const offsetDevPoints = rawToDeviation(offsetPoints, category);
       const targetTrace = buildTargetTrace(category);
 
       const baseFontPx = 16;
@@ -514,9 +534,53 @@ export async function renderProduct(
         hovertemplate: '%{fullData.name}: %{customdata}<extra></extra>',
       });
 
-      const renderFrPlot = (showTarget: boolean, showDeviation: boolean) => {
-        const pts = showDeviation ? devPoints : rawPoints;
+      const interpFrY = (pts: [number, number][], freq: number): number => {
+        if (freq <= pts[0][0]) return pts[0][1];
+        if (freq >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
+        let lo = 0, hi = pts.length - 1;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          if (pts[mid][0] <= freq) lo = mid; else hi = mid;
+        }
+        const [f0, v0] = pts[lo], [f1, v1] = pts[hi];
+        return v0 + (Math.log(freq / f0) / Math.log(f1 / f0)) * (v1 - v0);
+      };
+
+      const PEAK_DIP_OFFSET_DB = 1.2;
+      const makePeakDipTraces = (pds: PeakDipResult[], pts: [number, number][]): Data[] => {
+        const fmtHz = (hz: number) => hz < 1000 ? `${hz.toFixed(0)} Hz` : `${(hz / 1000).toFixed(2)} kHz`;
+        const peaks = pds.filter(pd => pd.kind === 'peak');
+        const dips  = pds.filter(pd => pd.kind === 'dip');
+        // Peaks: ▼ marker placed above the curve pointing down toward the peak
+        // Dips:  ▲ marker placed below the curve pointing up toward the dip
+        const makeTrace = (
+          items: PeakDipResult[], label: string, symbol: string, color: string, yOffset: number,
+        ): Data => ({
+          x: items.map(pd => pd.fcHz),
+          y: items.map(pd => interpFrY(pts, pd.fcHz) + yOffset),
+          type: 'scatter',
+          mode: 'markers',
+          name: label,
+          marker: { symbol, color, size: 10, line: { color: '#fff', width: 1 } } as Data['marker'],
+          customdata: items.map(pd =>
+            `${label} ${fmtHz(pd.fcHz)}<br>prom=${pd.prominenceDb.toFixed(1)} dB, w=${pd.widthOct.toFixed(2)} oct`
+          ),
+          hovertemplate: '%{customdata}<extra></extra>',
+        });
+        return [
+          makeTrace(peaks, 'Peak', 'triangle-down', '#ef4444', +PEAK_DIP_OFFSET_DB),
+          makeTrace(dips,  'Dip',  'triangle-up',   '#3b82f6', -PEAK_DIP_OFFSET_DB),
+        ];
+      };
+
+      const narration = analyzeFR(rawPoints, category);
+
+      const renderFrPlot = (showTarget: boolean, showDeviation: boolean, removeOffset: boolean, showPeakDip: boolean) => {
+        const pts = showDeviation
+          ? (removeOffset ? offsetDevPoints : devPoints)
+          : (removeOffset ? offsetPoints : rawPoints);
         const productTrace = makeFrTrace(pts, '#7c3aed', `${brandLabel} ${productLabel}`);
+        const pdTraces: Data[] = showPeakDip ? makePeakDipTraces(narration.allPeaksDips, pts) : [];
         const yTitle = showDeviation ? t('compare.fr.yaxis') : t('compare.fr.yaxis_abs');
         const yRange: [number, number] = showDeviation ? [-12, 12] : [-24, 18];
         const yDtick = showDeviation ? 3 : 6;
@@ -535,14 +599,14 @@ export async function renderProduct(
             hoverinfo: 'skip',
             showlegend: true,
           };
-          Plotly.react('product-fr-plot', [zeroTrace, productTrace], layout, plotConfig);
+          Plotly.react('product-fr-plot', [zeroTrace, productTrace, ...pdTraces], layout, plotConfig);
         } else {
-          const traces = showTarget ? [productTrace, targetTrace] : [productTrace];
+          const traces = showTarget ? [productTrace, targetTrace, ...pdTraces] : [productTrace, ...pdTraces];
           Plotly.react('product-fr-plot', traces, layout, plotConfig);
         }
       };
 
-      renderFrPlot(true, false);
+      renderFrPlot(frInitTarget, frInitDev, frInitOffset, frInitPeakDip);
 
       // Rewrite unified hover header to show formatted frequency
       const frPlotEl = document.getElementById('product-fr-plot');
@@ -559,14 +623,89 @@ export async function renderProduct(
       // Wire up toggles
       const targetCb = container.querySelector<HTMLInputElement>('#product-fr-target-cb');
       const devCb = container.querySelector<HTMLInputElement>('#product-fr-deviation-cb');
+      const offsetCb = container.querySelector<HTMLInputElement>('#product-fr-offset-cb');
+      const peakdipCb = container.querySelector<HTMLInputElement>('#product-fr-peakdip-cb');
+      if (targetCb) targetCb.disabled = frInitDev;
       const updateFrPlot = () => {
         const showDev = devCb?.checked ?? false;
         const showTarget = targetCb?.checked ?? true;
+        const removeOffset = offsetCb?.checked ?? true;
+        const showPeakDip = peakdipCb?.checked ?? true;
         if (targetCb) targetCb.disabled = showDev;
-        renderFrPlot(showTarget, showDev);
+        saveFrTarget(showTarget);
+        saveFrDeviation(showDev);
+        saveFrOffset(removeOffset);
+        saveFrPeakDip(showPeakDip);
+        renderFrPlot(showTarget, showDev, removeOffset, showPeakDip);
       };
       if (targetCb) targetCb.addEventListener('change', updateFrPlot);
       if (devCb) devCb.addEventListener('change', updateFrPlot);
+      if (offsetCb) offsetCb.addEventListener('change', updateFrPlot);
+      if (peakdipCb) peakdipCb.addEventListener('change', updateFrPlot);
+
+      // FR narration
+      const frNarrationEl = container.querySelector<HTMLElement>('#product-fr-narration');
+      if (frNarrationEl) {
+        try {
+          const addDot = (s: string) => s.endsWith('。') ? s : s.replace(/\.$/, '') + '。';
+
+          let html = '';
+
+          if (narration.summaryParagraphs.length > 0) {
+            html += `<h4 class="fr-narration-section-label">サマリ</h4>`;
+            html += `<div class="fr-narration-summary">`;
+            html += `<p class="fr-narration-para">${narration.summaryParagraphs.map(p => escHtml(addDot(p))).join('')}</p>`;
+            html += `</div>`;
+          }
+
+          if (narration.bandNarrations.length > 0) {
+            html += `<h4 class="fr-narration-section-label">帯域ごとの傾向</h4>`;
+            html += `<div class="fr-narration-bands">`;
+
+            // Build static tick SVG once (120×16px, 6px/dB, centre at 60px)
+            // Short ticks every 1dB (y 5–11), long ticks every 5dB (y 2–14), centre line
+            {
+              const GW = 120, GH = 16, CY = 8;
+              let svgLines = `<line x1="0" y1="${CY}" x2="${GW}" y2="${CY}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+              for (let i = 0; i <= 20; i++) {
+                const x = i * 6;
+                const isLong = i % 5 === 0;
+                const y1 = isLong ? 2 : 5, y2 = isLong ? 14 : 11;
+                const col = isLong ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)';
+                svgLines += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="1"/>`;
+              }
+              const GAUGE_SVG = `<svg class="fr-gauge-svg" viewBox="0 0 ${GW} ${GH}" xmlns="http://www.w3.org/2000/svg">${svgLines}</svg>`;
+
+              for (const b of narration.bandNarrations) {
+                const v = b.valueDb;
+                const sign = v >= 0 ? '+' : '';
+                const db = `${sign}${v.toFixed(1)} dB`;
+                const signClass = v > 0 ? 'fr-band-pos' : v < 0 ? 'fr-band-neg' : 'fr-band-zero';
+                const vc = Math.max(-10, Math.min(10, v));
+                const barLeft = v >= 0 ? 50 : 50 + vc * 5;
+                const barWidth = Math.abs(vc) * 5;
+                const opacityMap = { neutral: 0, slight: 0.35, clear: 0.55, severe: 0.75 };
+                const barOpacity = opacityMap[b.severity];
+                const rgb = v >= 0 ? '200,50,50' : '50,80,210';
+                const barStyle = `left:${barLeft.toFixed(1)}%;width:${barWidth.toFixed(1)}%;background:rgba(${rgb},${barOpacity})`;
+                const checkmark = b.severity === 'neutral' ? '✅ ' : '';
+                html += `<div class="fr-band-row fr-band-sev-${b.severity} ${signClass}">`;
+                html += `<span class="fr-band-label">${escHtml(b.label)}</span>`;
+                html += `<span class="fr-band-value"><span class="fr-gauge-wrap"><span class="fr-gauge-bar" style="${barStyle}"></span>${GAUGE_SVG}</span><span class="fr-band-num">${escHtml(db)}</span></span>`;
+                html += `<span class="fr-band-text">${checkmark}${escHtml(addDot(b.text))}</span>`;
+                html += `</div>`;
+              }
+            }
+
+            html += `</div>`;
+            html += `<p class="fr-narration-note">※ 周波数特性グラフから推定される聞こえ方を表したものです。測定された周波数特性は測定機器固有の特性、あるいは測定に用いられた個体固有のばらつきを含んでいる可能性があります。</p>`;
+          }
+
+          if (html) frNarrationEl.innerHTML = html;
+        } catch {
+          // narration is best-effort — silently ignore errors
+        }
+      }
     }
 
     // FR source URLs
@@ -621,19 +760,22 @@ export async function renderProduct(
   }
 
   // ── Ranking bar charts ──
-  const rankingSectionEl = container.querySelector<HTMLElement>('#product-ranking-section');
-  if (rankingSectionEl) {
-    // Fetch all products in the same category for ranking
-    const categoryProducts = await query<Record<string, unknown>>(
-      `SELECT p.*,
-        coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd,
-        CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END AS brand_label
-      FROM web_product_core p
-      WHERE p.category_primary = ?`,
-      [category],
-    );
+  // Fetch all products in the same category once for ranking
+  const categoryProducts = await query<Record<string, unknown>>(
+    `SELECT p.*,
+      coalesce(p.street_price_usd, p.msrp_usd) AS price_anchor_usd,
+      CASE WHEN p.brand_name_en = '' THEN 'unknown' ELSE p.brand_name_en END AS brand_label
+    FROM web_product_core p
+    WHERE p.category_primary = ?`,
+    [category],
+  );
 
-    const rankingAxes = getRankingAxes(false).filter((a) => a.id !== 'release_year');
+  const renderRankings = (splitMode: boolean) => {
+    const rankingSectionEl = container.querySelector<HTMLElement>('#product-ranking-section');
+    if (!rankingSectionEl) return;
+    rankingSectionEl.innerHTML = '';
+
+    const rankingAxes = getRankingAxes(splitMode).filter((a) => a.id !== 'release_year');
     const highlights = new Map<string, string>();
     highlights.set(pid, '#dc2626');
 
@@ -644,7 +786,47 @@ export async function renderProduct(
       highlights,
       t('product.rankings'),
       pid,
+      true,
     );
+  };
+
+  renderRankings(split);
+
+  // ── Split spec/measured toggle ──
+  const splitCb = container.querySelector<HTMLInputElement>('#product-split-measured');
+  if (splitCb) {
+    splitCb.addEventListener('change', () => {
+      split = splitCb.checked;
+      saveSplit(split);
+
+      // Re-render spec table rows (keep compact rows and sources row intact)
+      const tbody = container.querySelector<HTMLElement>('#product-spec-tbody');
+      if (tbody) {
+        // Remove all existing spec rows (everything before compact/sources rows)
+        const trs = Array.from(tbody.querySelectorAll('tr'));
+        // Compact rows have .product-compact-cell, sources row has #product-all-sources
+        for (const tr of trs) {
+          if (tr.querySelector('.product-compact-cell') || tr.querySelector('#product-all-sources')) continue;
+          tr.remove();
+        }
+        // Insert new spec rows at the beginning
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = `<table><tbody>${buildSpecRowsHtml(split)}</tbody></table>`;
+        const newRows = Array.from(tempDiv.querySelector('tbody')!.children);
+        const firstChild = tbody.firstChild;
+        for (const r of newRows) {
+          tbody.insertBefore(r, firstChild);
+        }
+
+        // Re-setup tooltips and context menus for the new rows
+        setupColHelpTooltips(container);
+        setupMeasuredBadgeTooltips(container);
+        setupSourceContextMenu(container);
+      }
+
+      // Re-render rankings
+      renderRankings(split);
+    });
   }
 }
 

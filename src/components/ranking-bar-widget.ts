@@ -46,6 +46,8 @@ export interface RankingBarConfig {
   height?: number;
   /** Product ID to exclude from click navigation (e.g. self on product page) */
   selfProductId?: string;
+  /** Disable click navigation on touch devices (prevents accidental taps) */
+  noClickOnTouch?: boolean;
 }
 
 /* ── Value formatter (mirrors scatter-widget fmtAxis) ── */
@@ -456,6 +458,8 @@ export function renderRankingBarWidget(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gd = plotEl as any;
   gd.on('plotly_click', (eventData: { points: Array<{ pointIndex: number }> }) => {
+    // Prevent accidental taps on touch devices (product page / compare tab)
+    if (config.noClickOnTouch && window.matchMedia('(pointer: coarse)').matches) return;
     const pt = eventData.points[0];
     if (!pt) return;
     const item = sorted[pt.pointIndex];
@@ -472,11 +476,15 @@ export function renderRankingBarWidget(
 /* ── Helper: get ranking-eligible axes (axes with `better` defined) ── */
 
 export function getRankingAxes(splitMode: boolean): AxisDef[] {
+  const allIds = new Set(AXES.map((a) => a.id));
+  const hasVariants = (id: string) =>
+    allIds.has(`${id}_measured`) || allIds.has(`${id}_spec`);
+
   return AXES.filter((a) => {
     if (!a.better) return false;
     if (splitMode) {
       // In split mode, show variant axes, hide base axes that have variants
-      return true;
+      return isVariantAxisId(a.id) || !hasVariants(a.id);
     }
     // In normal mode, hide variant axes
     return !isVariantAxisId(a.id);
@@ -589,6 +597,7 @@ export function createRankingSection(
   highlights: Map<string, string>,
   sectionTitle: string,
   selfProductId?: string,
+  noClickOnTouch?: boolean,
 ): HTMLElement {
   const section = document.createElement('div');
   section.className = 'card';
@@ -623,6 +632,16 @@ export function createRankingSection(
     titleEl.textContent = getAxisLabel(axis);
     body.appendChild(titleEl);
 
+    // Description hint (reuse axisdesc tooltip text)
+    const descKey = `axisdesc.${axis.id}`;
+    const desc = t(descKey);
+    if (desc !== descKey) {
+      const descEl = document.createElement('div');
+      descEl.className = 'ranking-bar-desc';
+      descEl.textContent = desc;
+      body.appendChild(descEl);
+    }
+
     const wrapper = document.createElement('div');
     wrapper.className = 'ranking-bar-wrapper';
     wrapper.style.marginBottom = '0';
@@ -655,6 +674,7 @@ export function createRankingSection(
           data,
           highlights,
           selfProductId,
+          noClickOnTouch,
         });
 
         // Populate ranking list for highlighted products
