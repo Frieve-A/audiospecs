@@ -21,7 +21,7 @@ const NON_HIGHLIGHT_OPACITY = 0.4;
 const HIGHLIGHT_OPACITY = 1.0;
 const COLOR_OTHER_LIGHT = '#bfdbfe';
 const COLOR_OTHER_DARK = '#1e3a5f';
-const COLOR_PRODUCT_HIGHLIGHT = '#dc2626';
+const COLOR_PRODUCT_HIGHLIGHT = '#2563eb';
 
 /* ── Types ── */
 

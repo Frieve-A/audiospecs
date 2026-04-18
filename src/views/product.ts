@@ -778,7 +778,7 @@ export async function renderProduct(
 
     const rankingAxes = getRankingAxes(splitMode).filter((a) => a.id !== 'release_year');
     const highlights = new Map<string, string>();
-    highlights.set(pid, '#dc2626');
+    highlights.set(pid, isDarkTheme() ? '#5b9bff' : '#2563eb');
 
     createRankingSection(
       rankingSectionEl,
