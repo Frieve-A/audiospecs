@@ -1,10 +1,11 @@
 /**
- * FR verbalization engine — v2.2
+ * FR verbalization engine — v2.3
  *
  * Converts raw frequency response + Harman target into human-readable sentences.
  * Reference: dev/frequency_response_verbalization_plan.md
  */
 
+import { getLocale } from '../i18n';
 import { getTargetCurve } from '../target-curves';
 
 export type FrType = 'over-ear' | 'on-ear' | 'in-ear';
@@ -192,19 +193,6 @@ function bandSev(key: string, absV: number): Severity {
   return 'severe';
 }
 
-function adv(sev: Severity): string {
-  if (sev === 'slight') return 'わずかに';
-  if (sev === 'clear') return '';
-  if (sev === 'severe') return '著しく';
-  return '';
-}
-
-function adjSev(sev: Severity): string {
-  if (sev === 'slight') return 'わずかな';
-  if (sev === 'severe') return '著しい';
-  return '';
-}
-
 function pdSev(kind: 'peak' | 'dip' | 'peak_dip_pair', prominenceDb: number): Severity {
   if (kind === 'peak') {
     if (prominenceDb < 3.0) return 'slight';
@@ -241,6 +229,313 @@ function sevMidRecess(v: number): Severity {
   if (v < 3.5) return 'slight';
   if (v < 5.0) return 'clear';
   return 'severe';
+}
+
+/* ── Localisation ── */
+
+interface BandTexts {
+  neutralText: string;
+  posText: string;   // template: {adv}
+  negText: string;   // template: {adv}
+  praiseText: string;
+}
+
+interface NarStrings {
+  adv(sev: Severity): string;
+  adjSev(sev: Severity): string;
+  summary: [string, string, string, string];
+  slopeHigh: string;  // template: {adv}
+  slopeLow: string;   // template: {adv}
+  contourText: Record<ContourPattern, string>;  // template: {adv}
+  bandText: Record<string, BandTexts>;
+  bassShelf: string;
+  bassAllBelow: string;
+  bassSubbass: string;
+  bassMidbass: string;
+  bassUpperbass: string;
+  integration1k2kPos: string;
+  integration1k2kNeg: string;
+  texture: [string, string, string, string];  // smooth … severe_rough
+  pdPair: Partial<Record<string, string>>;    // template: {adj}
+  pd: Record<string, { peak: string; dip: string }>;  // template: {adj}
+}
+
+const STRINGS_EN: NarStrings = {
+  adv(sev) {
+    if (sev === 'slight') return 'somewhat ';
+    if (sev === 'severe') return 'notably ';
+    return '';
+  },
+  adjSev(sev) {
+    if (sev === 'slight') return 'minor ';
+    if (sev === 'severe') return 'prominent ';
+    return '';
+  },
+  summary: [
+    'The frequency response tracks the target curve very closely.',
+    'The frequency response follows the target curve well.',
+    'The frequency response deviates somewhat from the target curve.',
+    'The frequency response deviates substantially from the target curve.',
+  ],
+  slopeHigh: 'The overall response tilts {adv}bright.',
+  slopeLow:  'The overall response tilts {adv}dark.',
+  contourText: {
+    neutral: '',
+    u_shape_subbass_focus:
+      'Sub-bass is {adv}boosted while upper bass stays controlled — extension digs deep without bloom.',
+    v_shape_treble_led:
+      'A treble-led V-shape — brightness and edge come {adv}forward while the midrange sounds lean and distant.',
+    v_shape_bass_led:
+      'A bass-led V-shape — low-end weight and punch are {adv}prominent while the midrange steps back.',
+    v_shape:
+      'Bass and treble are {adv}elevated with the midrange recessed in a V-shape. Bass and sparkle stand out while vocals sound somewhat distant.',
+    inverse_v:
+      'An inverse-V shape with the midrange {adv}pushed forward — vocals and lead instruments sound close and full.',
+    mid_recessed:
+      'The midrange is {adv}recessed, pushing vocals and lead instruments further back in the mix.',
+  },
+  bandText: {
+    '20_60': {
+      neutralText: 'Sub-bass extends naturally to the lowest octave.',
+      posText:     'Sub-bass depth and weight are {adv}elevated.',
+      negText:     'Sub-bass depth and weight are {adv}reduced.',
+      praiseText:  'Sub-bass extends cleanly to the lowest octave, providing a solid natural foundation for the low end.',
+    },
+    '60_120': {
+      neutralText: 'Kick impact and bass body feel naturally balanced.',
+      posText:     'Kick impact and bass body are {adv}elevated.',
+      negText:     'Kick impact and bass body are {adv}reduced.',
+      praiseText:  'Kick impact and bass body feel naturally balanced, with a satisfying sense of drive.',
+    },
+    '120_250': {
+      neutralText: 'Low-end warmth and fullness are naturally proportioned.',
+      posText:     'Low-end warmth and fullness are {adv}elevated.',
+      negText:     'Low-end warmth and fullness are {adv}reduced.',
+      praiseText:  'Low-end warmth and fullness are well-proportioned, keeping the overall tonal balance grounded.',
+    },
+    '250_500': {
+      neutralText: 'Upper-bass density feels natural.',
+      posText:     'Upper-bass density is {adv}elevated.',
+      negText:     'Upper-bass density is {adv}reduced.',
+      praiseText:  'Upper-bass density is well-balanced, with a natural sense of instrument body and resonance.',
+    },
+    '500_1k': {
+      neutralText: 'Midrange body and core are stable.',
+      posText:     'Midrange body and core are {adv}elevated.',
+      negText:     'Midrange body and core are {adv}reduced.',
+      praiseText:  'Midrange body and core are stable, letting each instrument come through with clear presence.',
+    },
+    '1k_2k': {
+      neutralText: 'Vocal and lead-instrument placement feel natural.',
+      posText:     'Vocals and lead instruments are {adv}forward.',
+      negText:     'Vocals and lead instruments are {adv}recessed.',
+      praiseText:  'Vocal and lead-instrument placement feel natural, with low listening fatigue.',
+    },
+    '2k_4k': {
+      neutralText: 'Presence and clarity are well-balanced.',
+      posText:     'Presence and clarity are {adv}elevated.',
+      negText:     'Presence and clarity are {adv}reduced.',
+      praiseText:  'Presence and clarity are balanced and smooth — comfortable for extended listening.',
+    },
+    '4k_8k': {
+      neutralText: 'Attack and transient detail are well-defined without being excessive.',
+      posText:     'Attack and transient detail are {adv}elevated.',
+      negText:     'Attack and transient detail are {adv}reduced.',
+      praiseText:  'Attack and transient detail are well-defined without harshness, reproducing fine nuances naturally.',
+    },
+    '8k_20k': {
+      neutralText: 'High-frequency air and extension feel natural.',
+      posText:     'Treble air and extension are potentially {adv}elevated.',
+      negText:     'Treble air and extension are potentially {adv}reduced.',
+      praiseText:  'Treble air feels natural and unfatiguing, with the full range cohesively balanced.',
+    },
+  },
+  bassShelf:    'Bass is uniformly elevated in a shelf shape, with fullness from sub-bass through upper bass.',
+  bassAllBelow: 'Bass is uniformly subdued, giving the sound a light, lean low end.',
+  bassSubbass:  'Deep sub-bass is notably prominent, extending downward without bloating the upper bass.',
+  bassMidbass:  'Mid-bass punch is prominent — kick drums hit with a full, weighty impact.',
+  bassUpperbass:'Upper bass is prominent, adding warmth and body to the overall character.',
+  integration1k2kPos: 'Vocal presence and clarity are both pushed forward.',
+  integration1k2kNeg: 'Vocal presence and clarity are both recessed.',
+  texture: [
+    'The main frequency bands are relatively smooth with no strong tonal coloration.',
+    'The main bands show slight fine-grained unevenness that can add subtle tonal character.',
+    'The main bands show noticeable unevenness — tonal character may vary with recordings and playback level.',
+    'The main bands are heavily uneven, with wide variation in tonal quality across the spectrum.',
+  ],
+  pdPair: {
+    '1k_2k':  'A {adj}peak-dip pair around 1–3 kHz can create uneven coloration in vocals and lead instruments.',
+    '2k_4k':  'A {adj}peak-dip pair around 3–5 kHz gives the presence region an irregular edge.',
+    '4k_8k':  'A {adj}peak-dip pair around 5–8 kHz mixes sharp and smooth transient character.',
+    '8k_12k': 'A {adj}peak-dip pair around 8–12 kHz may cause uneven upper-treble sparkle.',
+  },
+  pd: {
+    '250_500': {
+      peak: 'A {adj}local peak at 250–500 Hz may add localized boxiness or muddiness.',
+      dip:  'A {adj}local dip at 250–500 Hz can thin out body in a narrow range.',
+    },
+    '500_1k': {
+      peak: 'A {adj}local peak at 500 Hz–1 kHz can add localized midrange bloom.',
+      dip:  'A {adj}local dip at 500 Hz–1 kHz can leave the midrange sounding slightly hollow.',
+    },
+    '1k_2k': {
+      peak: 'A {adj}local peak at 1–2 kHz can push vocals and guitars forward in a narrow band.',
+      dip:  'A {adj}local dip at 1–2 kHz can strip core from vocals, making them sound distant.',
+    },
+    '2k_4k': {
+      peak: 'A {adj}local peak at 2–4 kHz can create narrow-band presence emphasis.',
+      dip:  'A {adj}local dip at 2–4 kHz can reduce clarity in a specific range.',
+    },
+    '4k_8k': {
+      peak: 'A {adj}local peak at 4–8 kHz can cause sibilance or cymbal harshness.',
+      dip:  'A {adj}local dip at 4–8 kHz rounds off transient edges, giving a smoother character.',
+    },
+    '8k_12k': {
+      peak: 'A {adj}local peak at 8–12 kHz may add localized upper-treble glare.',
+      dip:  'A {adj}local dip at 8–12 kHz may limit air and extension in the upper range.',
+    },
+  },
+};
+
+const STRINGS_JA: NarStrings = {
+  adv(sev) {
+    if (sev === 'slight') return 'わずかに';
+    if (sev === 'severe') return '著しく';
+    return '';
+  },
+  adjSev(sev) {
+    if (sev === 'slight') return 'わずかな';
+    if (sev === 'severe') return '著しい';
+    return '';
+  },
+  summary: [
+    '周波数特性のTargetカーブへの追従性は非常に高いです',
+    '周波数特性のTargetカーブへの追従性は良好です',
+    'Targetカーブからの周波数特性のずれがやや見られます',
+    'Targetカーブからの周波数特性のずれが大きめです',
+  ],
+  slopeHigh: '全体として{adv}高域寄りの周波数特性です。',
+  slopeLow:  '全体として{adv}低域寄りの周波数特性です。',
+  contourText: {
+    neutral: '',
+    u_shape_subbass_focus:
+      '深い低域だけを{adv}強めたU字寄りです。中低域を膨らませず、下だけ沈み込むタイプの低音に聞こえます',
+    v_shape_treble_led:
+      '高域側が主導する{adv}V字傾向です。明るさと輪郭が先に立ち、主旋律はやや細く遠く聞こえます',
+    v_shape_bass_led:
+      '低域側が主導する{adv}V字傾向です。低音の厚みと押し出しが先に来て、主旋律は少し奥に下がって聞こえます',
+    v_shape:
+      '低域と高域が{adv}持ち上がり、中域が引くV字傾向です。低音ときらびやかさは目立ちやすい一方、ボーカルはやや遠く聞こえます',
+    inverse_v:
+      '中域が{adv}前に張り出した逆V字傾向です。ボーカルや主旋律が近く濃く聞こえやすいです',
+    mid_recessed:
+      '中域が{adv}引き気味で、主旋律や声がやや後ろに下がって聞こえます',
+  },
+  bandText: {
+    '20_60': {
+      neutralText: 'サブベースは最下層まで無理なく伸びています',
+      posText:     'サブベースの沈み込みと重量感が{adv}強いです',
+      negText:     'サブベースの沈み込みと重量感が{adv}弱いです',
+      praiseText:  'サブベースは最下層まで自然に伸び、重低音の土台がしっかり整っています',
+    },
+    '60_120': {
+      neutralText: '低音の芯と押し出しは自然です',
+      posText:     'キックの打撃感と低音の芯が{adv}強いです',
+      negText:     'キックの打撃感と低音の芯が{adv}弱いです',
+      praiseText:  '低域の芯と押し出しが安定しており、キックの打撃感もバランス良く出ています',
+    },
+    '120_250': {
+      neutralText: '低域の厚みと温度感の配分は自然です',
+      posText:     '低域の厚みと温かさが{adv}強いです',
+      negText:     '低域の厚みと温かさが{adv}弱いです',
+      praiseText:  '低域の厚みと温度感のバランスが整っており、全体の重心が安定しています',
+    },
+    '250_500': {
+      neutralText: '低中域の密度は自然です',
+      posText:     '低中域の密度が{adv}高いです',
+      negText:     '低中域の密度が{adv}低いです',
+      praiseText:  '低中域の密度が過不足なく整い、楽器の胴鳴り感が自然に出ています',
+    },
+    '500_1k': {
+      neutralText: '中域の芯立ちは安定しています',
+      posText:     '中域の密度と芯が{adv}強いです',
+      negText:     '中域の密度と芯が{adv}弱いです',
+      praiseText:  '中域の芯立ちが安定しており、楽器ひとつひとつの存在感が過不足なく出ています',
+    },
+    '1k_2k': {
+      neutralText: 'ボーカルや主旋律の距離感は自然です',
+      posText:     'ボーカルと主旋律が{adv}前に出ます',
+      negText:     'ボーカルと主旋律が{adv}引きます',
+      praiseText:  'ボーカルや主旋律の距離感が自然で、聴き疲れしにくいバランスが保たれています',
+    },
+    '2k_4k': {
+      neutralText: '明瞭さと存在感の釣り合いが取れています',
+      posText:     'プレゼンスと明瞭さが{adv}強いです',
+      negText:     'プレゼンスと明瞭さが{adv}弱いです',
+      praiseText:  'プレゼンスと明瞭さのバランスが整っており、刺さりが出にくく長時間のリスニングにも向きます',
+    },
+    '4k_8k': {
+      neutralText: '輪郭は十分に立ちつつ過度ではありません',
+      posText:     'アタック感と輪郭が{adv}強いです',
+      negText:     'アタック感と輪郭が{adv}弱いです',
+      praiseText:  '輪郭感とアタックが過不足なく整い、細部のニュアンスも自然に再現されています',
+    },
+    '8k_20k': {
+      neutralText: '高域の開放感は自然と考えられます',
+      posText:     '高域の抜けと空気感が{adv}強い可能性があります',
+      negText:     '高域の抜けと空気感が{adv}控えめな可能性があります',
+      praiseText:  '高域の開放感が自然で、空気感が過剰にならず全帯域が心地よくまとまっている可能性があります',
+    },
+  },
+  bassShelf:    '低域はシェルフ状に一貫して持ち上がっています。下から中低域までまとめて厚く聞こえやすいです',
+  bassAllBelow: '低域は全体に控えめで、土台が軽く聞こえやすいです',
+  bassSubbass:  '深い低域の沈み込みが目立ちます。重低音だけが下へ伸びるタイプです',
+  bassMidbass:  '中低域のパンチが前に出ます。キックの一撃が太く感じやすいです',
+  bassUpperbass:'上側低域の厚みが目立ちます。温かさや膨らみが乗りやすいです',
+  integration1k2kPos: 'ボーカルの前後感とプレゼンスがまとめて前に出ます',
+  integration1k2kNeg: 'ボーカルの前後感とプレゼンスがまとめて控えめです',
+  texture: [
+    '主要な帯域は比較的滑らかで、質感の癖は強くありません',
+    '主要な帯域にやや細かな凹凸があり、音色に小さな癖が乗りやすいです',
+    '主要な帯域に明確な凹凸があり、録音や音量で質感の印象が変わりやすいです',
+    '主要な帯域の凹凸が大きく、帯域ごとの当たり外れが出やすいです',
+  ],
+  pdPair: {
+    '1k_2k':  '1–3 kHzに{adj}山谷があり、声や主旋律の出方にむらが出やすいです',
+    '2k_4k':  '3–5 kHzに{adj}山谷があり、輪郭の硬さに癖が出やすいです',
+    '4k_8k':  '5–8 kHzに{adj}山谷があり、刺さる音と穏やかな音が混在しやすいです',
+    '8k_12k': '8–12 kHzに{adj}山谷があり、高域上部の輝き方にむらが出やすい可能性があります',
+  },
+  pd: {
+    '250_500': {
+      peak: '250–500 Hzに{adj}局所ピークがあり、胴鳴りやこもりが局所的に増えやすいです',
+      dip:  '250–500 Hzに{adj}局所ディップがあり、厚みが一部だけ痩せやすいです',
+    },
+    '500_1k': {
+      peak: '500 Hz–1 kHzに{adj}局所ピークがあり、中域の芯が局所的に膨らみやすいです',
+      dip:  '500 Hz–1 kHzに{adj}局所ディップがあり、芯が抜けて少し軽く感じやすいです',
+    },
+    '1k_2k': {
+      peak: '1–2 kHzに{adj}局所ピークがあり、声やギターが張り付くように前へ出やすいです',
+      dip:  '1–2 kHzに{adj}局所ディップがあり、声の芯が抜けて少し遠く感じやすいです',
+    },
+    '2k_4k': {
+      peak: '2–4 kHzに{adj}局所ピークがあり、プレゼンスが局所的に強調されやすいです',
+      dip:  '2–4 kHzに{adj}局所ディップがあり、明瞭さの一部が落ち込みやすいです',
+    },
+    '4k_8k': {
+      peak: '4–8 kHzに{adj}局所ピークがあり、歯擦音やシンバルの刺さりが出やすいです',
+      dip:  '4–8 kHzに{adj}局所ディップがあり、輪郭感が抜けてやや穏やかに聞こえます',
+    },
+    '8k_12k': {
+      peak: '8–12 kHzに{adj}局所ピークがあり、きらつきが局所的に目立ちやすい可能性があります',
+      dip:  '8–12 kHzに{adj}局所ディップがあり、抜けの伸びが少し頭打ちになりやすい可能性があります',
+    },
+  },
+};
+
+function getS(): NarStrings {
+  return getLocale() === 'ja' ? STRINGS_JA : STRINGS_EN;
 }
 
 /* ── Result types ── */
@@ -325,9 +620,26 @@ export interface FRNarration {
   allPeaksDips: PeakDipResult[];  // all detected peaks/dips before narration suppression, for visualization
 }
 
+/* ── Band definitions (static — text from NarStrings) ── */
+
+const BAND_DEFS: Array<{
+  key: string; label: string; fLo: number; fHi: number;
+  domain: 'low' | 'bodyPresence' | 'treble' | 'air';
+}> = [
+  { key: '20_60',   label: '20–60 Hz',      fLo: 20,   fHi: 60,    domain: 'low' },
+  { key: '60_120',  label: '60–120 Hz',     fLo: 60,   fHi: 120,   domain: 'low' },
+  { key: '120_250', label: '120–250 Hz',    fLo: 120,  fHi: 250,   domain: 'low' },
+  { key: '250_500', label: '250–500 Hz',    fLo: 250,  fHi: 500,   domain: 'bodyPresence' },
+  { key: '500_1k',  label: '500 Hz–1 kHz',  fLo: 500,  fHi: 1000,  domain: 'bodyPresence' },
+  { key: '1k_2k',   label: '1–2 kHz',       fLo: 1000, fHi: 2000,  domain: 'bodyPresence' },
+  { key: '2k_4k',   label: '2–4 kHz',       fLo: 2000, fHi: 4000,  domain: 'treble' },
+  { key: '4k_8k',   label: '4–8 kHz',       fLo: 4000, fHi: 8000,  domain: 'treble' },
+  { key: '8k_20k',  label: '8–20 kHz',      fLo: 8000, fHi: 20000, domain: 'air' },
+];
+
 /* ── Analysis sub-functions ── */
 
-function analyzeSummary(macro: Float64Array): SummaryResult {
+function analyzeSummary(macro: Float64Array, s: NarStrings): SummaryResult {
   const vals = rangeVals(macro, 40, 10000);
   const summarySD = sd(vals);
   const idx = rangeIdx(40, 10000);
@@ -337,10 +649,10 @@ function analyzeSummary(macro: Float64Array): SummaryResult {
   const absSlope = Math.abs(signedSlope);
 
   const text =
-    summarySD < 1.4 && absSlope < 0.40 ? '周波数特性のTargetカーブへの追従性は非常に高いです' :
-    summarySD < 2.0 && absSlope < 0.65 ? '周波数特性のTargetカーブへの追従性は良好です' :
-    summarySD < 2.8 && absSlope < 0.95 ? 'Targetカーブからの周波数特性のずれがやや見られます' :
-    'Targetカーブからの周波数特性のずれが大きめです';
+    summarySD < 1.4 && absSlope < 0.40 ? s.summary[0] :
+    summarySD < 2.0 && absSlope < 0.65 ? s.summary[1] :
+    summarySD < 2.8 && absSlope < 0.95 ? s.summary[2] :
+    s.summary[3];
 
   return {
     summarySD, absSlope, signedSlope, text,
@@ -348,7 +660,7 @@ function analyzeSummary(macro: Float64Array): SummaryResult {
   };
 }
 
-function analyzeContour(macro: Float64Array, frType: FrType): ContourResult | undefined {
+function analyzeContour(macro: Float64Array, frType: FrType, s: NarStrings): ContourResult | undefined {
   const mSB = rangeMean(macro, 20, 60);
   const m60_200 = rangeMean(macro, 60, 200);
   const LB = frType === 'in-ear'
@@ -369,29 +681,29 @@ function analyzeContour(macro: Float64Array, frType: FrType): ContourResult | un
   const isV = vBroad >= 3.0 && (LB - BD) >= 1.5 && (TB - PR) >= 1.0 && PR <= 0.5;
   const isInvV = invBroad >= 2.5 && BD >= 0.0 && PR >= 1.0 && (PR >= LB + 1.0 || PR >= TB + 1.0);
 
+  const applyAdv = (tmpl: string, sev: Severity) => tmpl.replace('{adv}', s.adv(sev));
+
   if (isSubbassU) {
     const sev = sevV(vBroad);
-    const a = adv(sev);
     return {
       pattern: 'u_shape_subbass_focus', strengthDb: vBroad, severity: sev,
-      text: `深い低域だけを${a}強めたU字寄りです。中低域を膨らませず、下だけ沈み込むタイプの低音に聞こえます`,
+      text: applyAdv(s.contourText.u_shape_subbass_focus, sev),
       techSuffix: `（LB=${LB.toFixed(1)} BD=${BD.toFixed(1)} PR=${PR.toFixed(1)} TB=${TB.toFixed(1)} dB）`,
     };
   }
 
   if (isV) {
     const sev = sevV(vBroad);
-    const a = adv(sev);
     let pattern: ContourPattern, text: string;
     if (vTilt >= 1.5) {
       pattern = 'v_shape_treble_led';
-      text = `高域側が主導する${a}V字傾向です。明るさと輪郭が先に立ち、主旋律はやや細く遠く聞こえます`;
+      text = applyAdv(s.contourText.v_shape_treble_led, sev);
     } else if (vTilt <= -1.5) {
       pattern = 'v_shape_bass_led';
-      text = `低域側が主導する${a}V字傾向です。低音の厚みと押し出しが先に来て、主旋律は少し奥に下がって聞こえます`;
+      text = applyAdv(s.contourText.v_shape_bass_led, sev);
     } else {
       pattern = 'v_shape';
-      text = `低域と高域が${a}持ち上がり、中域が引くV字傾向です。低音ときらびやかさは目立ちやすい一方、ボーカルはやや遠く聞こえます`;
+      text = applyAdv(s.contourText.v_shape, sev);
     }
     return {
       pattern, strengthDb: vBroad, severity: sev, text,
@@ -401,20 +713,18 @@ function analyzeContour(macro: Float64Array, frType: FrType): ContourResult | un
 
   if (isInvV) {
     const sev = sevInvV(invBroad);
-    const a = adv(sev);
     return {
       pattern: 'inverse_v', strengthDb: invBroad, severity: sev,
-      text: `中域が${a}前に張り出した逆V字傾向です。ボーカルや主旋律が近く濃く聞こえやすいです`,
+      text: applyAdv(s.contourText.inverse_v, sev),
       techSuffix: `（invBroad=${invBroad.toFixed(1)} dB）`,
     };
   }
 
   if (midRecess >= 2.0) {
     const sev = sevMidRecess(midRecess);
-    const a = adv(sev);
     return {
       pattern: 'mid_recessed', strengthDb: midRecess, severity: sev,
-      text: `中域が${a}引き気味で、主旋律や声がやや後ろに下がって聞こえます`,
+      text: applyAdv(s.contourText.mid_recessed, sev),
       techSuffix: `（midRecess=${midRecess.toFixed(1)} dB）`,
     };
   }
@@ -422,7 +732,7 @@ function analyzeContour(macro: Float64Array, frType: FrType): ContourResult | un
   return undefined;
 }
 
-function analyzeSlope(macro: Float64Array): SlopeResult {
+function analyzeSlope(macro: Float64Array, s: NarStrings): SlopeResult {
   const idx = rangeIdx(40, 10000);
   const xs = idx.map(i => Math.log2(GRID[i] / 1000));
   const ys = idx.map(i => macro[i]);
@@ -435,97 +745,41 @@ function analyzeSlope(macro: Float64Array): SlopeResult {
     absM < 1.20 ? 'clear' : 'severe';
 
   const sign = (m > 0 ? 1 : m < 0 ? -1 : 0) as -1 | 0 | 1;
-  const a = adv(severity);
+  const a = s.adv(severity);
   const text = severity === 'neutral' ? undefined :
-    m > 0
-      ? `全体として${a}高域寄りの周波数特性です。`
-      : `全体として${a}低域寄りの周波数特性です。`;
+    (m > 0
+      ? s.slopeHigh.replace('{adv}', a)
+      : s.slopeLow.replace('{adv}', a));
 
   return { slopeDbPerOct: m, severity, sign, text, techSuffix: `（slope=${m.toFixed(2)} dB/oct）` };
 }
-
-const BAND_DEFS: Array<{
-  key: string; label: string; fLo: number; fHi: number;
-  domain: 'low' | 'bodyPresence' | 'treble' | 'air';
-  neutralText: string; posText: string; negText: string; praiseText: string;
-}> = [
-  { key: '20_60',   label: '20–60 Hz',      fLo: 20,   fHi: 60,    domain: 'low',
-    neutralText: 'サブベースは最下層まで無理なく伸びています',
-    posText: 'サブベースの沈み込みと重量感が{adv}強いです',
-    negText: 'サブベースの沈み込みと重量感が{adv}弱いです',
-    praiseText: 'サブベースは最下層まで自然に伸び、重低音の土台がしっかり整っています' },
-  { key: '60_120',  label: '60–120 Hz',     fLo: 60,   fHi: 120,   domain: 'low',
-    neutralText: '低音の芯と押し出しは自然です',
-    posText: 'キックの打撃感と低音の芯が{adv}強いです',
-    negText: 'キックの打撃感と低音の芯が{adv}弱いです',
-    praiseText: '低域の芯と押し出しが安定しており、キックの打撃感もバランス良く出ています' },
-  { key: '120_250', label: '120–250 Hz',    fLo: 120,  fHi: 250,   domain: 'low',
-    neutralText: '低域の厚みと温度感の配分は自然です',
-    posText: '低域の厚みと温かさが{adv}強いです',
-    negText: '低域の厚みと温かさが{adv}弱いです',
-    praiseText: '低域の厚みと温度感のバランスが整っており、全体の重心が安定しています' },
-  { key: '250_500', label: '250–500 Hz',    fLo: 250,  fHi: 500,   domain: 'bodyPresence',
-    neutralText: '低中域の密度は自然です',
-    posText: '低中域の密度が{adv}高いです',
-    negText: '低中域の密度が{adv}低いです',
-    praiseText: '低中域の密度が過不足なく整い、楽器の胴鳴り感が自然に出ています' },
-  { key: '500_1k',  label: '500 Hz–1 kHz',  fLo: 500,  fHi: 1000,  domain: 'bodyPresence',
-    neutralText: '中域の芯立ちは安定しています',
-    posText: '中域の密度と芯が{adv}強いです',
-    negText: '中域の密度と芯が{adv}弱いです',
-    praiseText: '中域の芯立ちが安定しており、楽器ひとつひとつの存在感が過不足なく出ています' },
-  { key: '1k_2k',   label: '1–2 kHz',       fLo: 1000, fHi: 2000,  domain: 'bodyPresence',
-    neutralText: 'ボーカルや主旋律の距離感は自然です',
-    posText: 'ボーカルと主旋律が{adv}前に出ます',
-    negText: 'ボーカルと主旋律が{adv}引きます',
-    praiseText: 'ボーカルや主旋律の距離感が自然で、聴き疲れしにくいバランスが保たれています' },
-  { key: '2k_4k',   label: '2–4 kHz',       fLo: 2000, fHi: 4000,  domain: 'treble',
-    neutralText: '明瞭さと存在感の釣り合いが取れています',
-    posText: 'プレゼンスと明瞭さが{adv}強いです',
-    negText: 'プレゼンスと明瞭さが{adv}弱いです',
-    praiseText: 'プレゼンスと明瞭さのバランスが整っており、刺さりが出にくく長時間のリスニングにも向きます' },
-  { key: '4k_8k',   label: '4–8 kHz',       fLo: 4000, fHi: 8000,  domain: 'treble',
-    neutralText: '輪郭は十分に立ちつつ過度ではありません',
-    posText: 'アタック感と輪郭が{adv}強いです',
-    negText: 'アタック感と輪郭が{adv}弱いです',
-    praiseText: '輪郭感とアタックが過不足なく整い、細部のニュアンスも自然に再現されています' },
-  { key: '8k_20k',  label: '8–20 kHz',      fLo: 8000, fHi: 20000, domain: 'air',
-    neutralText: '高域の開放感は自然と考えられます',
-    posText: '高域の抜けと空気感が{adv}強い可能性があります',
-    negText: '高域の抜けと空気感が{adv}控えめな可能性があります',
-    praiseText: '高域の開放感が自然で、空気感が過剰にならず全帯域が心地よくまとまっている可能性があります' },
-];
 
 function fmtHz(hz: number): string {
   return hz < 1000 ? `${hz}` : `${hz / 1000}k`;
 }
 
-function analyzeBands(macro: Float64Array): BandResult[] {
+function analyzeBands(macro: Float64Array, s: NarStrings): BandResult[] {
   return BAND_DEFS.map(d => {
+    const bt = s.bandText[d.key];
     const v = trimMean(rangeVals(macro, d.fLo, d.fHi), 0.1);
     const sev = bandSev(d.key, Math.abs(v));
     const sign = (v > 0 ? 1 : v < 0 ? -1 : 0) as -1 | 0 | 1;
-    const template = sev === 'neutral' ? d.neutralText : (v > 0 ? d.posText : d.negText);
-    const text = template.replace('{adv}', adv(sev));
+    const template = sev === 'neutral' ? bt.neutralText : (v > 0 ? bt.posText : bt.negText);
+    const text = template.replace('{adv}', s.adv(sev));
     const techSuffix = `（${fmtHz(d.fLo)}–${fmtHz(d.fHi)} Hz, ${v >= 0 ? '+' : ''}${v.toFixed(1)} dB）`;
     return { band: d.key, label: d.label, fLo: d.fLo, fHi: d.fHi, valueDb: v, severity: sev, sign, domain: d.domain, text, techSuffix };
   });
 }
 
-function analyzeTexture(residual: Float64Array): TextureResult {
+function analyzeTexture(residual: Float64Array, s: NarStrings): TextureResult {
   const roughnessDb = trimRms(rangeVals(residual, 1000, 8000), 0.1);
   const severity: TextureSeverity =
     roughnessDb < 1.25 ? 'smooth' :
     roughnessDb < 2.0 ? 'slight_rough' :
     roughnessDb < 3.0 ? 'clear_rough' : 'severe_rough';
 
-  const text =
-    severity === 'smooth' ? '主要な帯域は比較的滑らかで、質感の癖は強くありません' :
-    severity === 'slight_rough' ? '主要な帯域にやや細かな凹凸があり、音色に小さな癖が乗りやすいです' :
-    severity === 'clear_rough' ? '主要な帯域に明確な凹凸があり、録音や音量で質感の印象が変わりやすいです' :
-    '主要な帯域の凹凸が大きく、帯域ごとの当たり外れが出やすいです';
-
-  return { roughnessDb, severity, text, techSuffix: `（roughness=${roughnessDb.toFixed(2)} dB）` };
+  const idx = ['smooth', 'slight_rough', 'clear_rough', 'severe_rough'].indexOf(severity);
+  return { roughnessDb, severity, text: s.texture[idx], techSuffix: `（roughness=${roughnessDb.toFixed(2)} dB）` };
 }
 
 const PD_REGIONS: Array<{
@@ -540,30 +794,8 @@ const PD_REGIONS: Array<{
   { fLo: 8000, fHi: 12000, key: '8k_12k'  },
 ];
 
-const PD_PAIR_TEXTS: Partial<Record<string, string>> = {
-  '1k_2k':  '1–3 kHzに{adj}山谷があり、声や主旋律の出方にむらが出やすいです',
-  '2k_4k':  '3–5 kHzに{adj}山谷があり、輪郭の硬さに癖が出やすいです',
-  '4k_8k':  '5–8 kHzに{adj}山谷があり、刺さる音と穏やかな音が混在しやすいです',
-  '8k_12k': '8–12 kHzに{adj}山谷があり、高域上部の輝き方にむらが出やすい可能性があります',
-};
-
-const PD_TEXTS: Record<string, { peak: string; dip: string }> = {
-  '250_500': { peak: '250–500 Hzに{adj}局所ピークがあり、胴鳴りやこもりが局所的に増えやすいです',
-               dip:  '250–500 Hzに{adj}局所ディップがあり、厚みが一部だけ痩せやすいです' },
-  '500_1k':  { peak: '500 Hz–1 kHzに{adj}局所ピークがあり、中域の芯が局所的に膨らみやすいです',
-               dip:  '500 Hz–1 kHzに{adj}局所ディップがあり、芯が抜けて少し軽く感じやすいです' },
-  '1k_2k':   { peak: '1–2 kHzに{adj}局所ピークがあり、声やギターが張り付くように前へ出やすいです',
-               dip:  '1–2 kHzに{adj}局所ディップがあり、声の芯が抜けて少し遠く感じやすいです' },
-  '2k_4k':   { peak: '2–4 kHzに{adj}局所ピークがあり、プレゼンスが局所的に強調されやすいです',
-               dip:  '2–4 kHzに{adj}局所ディップがあり、明瞭さの一部が落ち込みやすいです' },
-  '4k_8k':   { peak: '4–8 kHzに{adj}局所ピークがあり、歯擦音やシンバルの刺さりが出やすいです',
-               dip:  '4–8 kHzに{adj}局所ディップがあり、輪郭感が抜けてやや穏やかに聞こえます' },
-  '8k_12k':  { peak: '8–12 kHzに{adj}局所ピークがあり、きらつきが局所的に目立ちやすい可能性があります',
-               dip:  '8–12 kHzに{adj}局所ディップがあり、抜けの伸びが少し頭打ちになりやすい可能性があります' },
-};
-
 function analyzePeaksDips(
-  error: Float64Array, texture: TextureResult,
+  error: Float64Array, texture: TextureResult, s: NarStrings,
 ): { all: PeakDipResult[]; selected: PeakDipResult[] } {
   // Smooth the error at 1/12-oct half-window (5-point box) to get stable local extrema
   // without losing features visible on a typical FR graph display.
@@ -632,9 +864,9 @@ function analyzePeaksDips(
 
     const kind = isPeak ? 'peak' : 'dip';
     const sev = pdSev(kind, prom);
-    const adj = adjSev(sev);
-    const rawText = PD_TEXTS[reg.key]?.[kind] ?? '';
-    const text = rawText.replace('{adj}', adj ? adj : '');
+    const adj = s.adjSev(sev);
+    const rawText = s.pd[reg.key]?.[kind] ?? '';
+    const text = rawText.replace('{adj}', adj);
     candidates.push({
       kind,
       fcHz, prominenceDb: prom, widthOct, score,
@@ -657,15 +889,15 @@ function analyzePeaksDips(
 
   const regionKeys = Array.from(new Set(candidates.map(c => c.region)));
   for (const region of regionKeys) {
-    const pairText = PD_PAIR_TEXTS[region];
-    if (!pairText) continue;
+    const pairTextTmpl = s.pdPair[region];
+    if (!pairTextTmpl) continue;
     const peaks = candidates.filter(c => c.region === region && c.kind === 'peak');
     const dips  = candidates.filter(c => c.region === region && c.kind === 'dip');
     if (peaks.length === 0 || dips.length === 0) continue;
     const best = peaks[0].score >= dips[0].score ? peaks[0] : dips[0];
     const pairProm = Math.max(peaks[0].prominenceDb, dips[0].prominenceDb);
     const pairSev = pdSev('peak_dip_pair', pairProm);
-    const pairAdj = adjSev(pairSev);
+    const pairAdj = s.adjSev(pairSev);
     pairedRegions.add(region);
     pairResults.push({
       kind: 'peak_dip_pair',
@@ -673,8 +905,8 @@ function analyzePeaksDips(
       prominenceDb: pairProm,
       widthOct: Math.max(peaks[0].widthOct, dips[0].widthOct),
       score: Math.max(peaks[0].score, dips[0].score),
-      region,
-      text: pairText.replace('{adj}', pairAdj ? pairAdj : ''),
+      region: region as PeakDipResult['region'],
+      text: pairTextTmpl.replace('{adj}', pairAdj),
       techSuffix: `（peak fc=${peaks[0].fcHz.toFixed(0)} Hz, dip fc=${dips[0].fcHz.toFixed(0)} Hz）`,
     });
   }
@@ -697,7 +929,7 @@ function analyzePeaksDips(
   return { all, selected };
 }
 
-function analyzeBassShape(macro: Float64Array, contour: ContourResult | undefined): { text: string } | undefined {
+function analyzeBassShape(macro: Float64Array, contour: ContourResult | undefined, s: NarStrings): { text: string } | undefined {
   const b1 = rangeMean(macro, 20, 60);
   const b2 = rangeMean(macro, 60, 120);
   const b3 = rangeMean(macro, 120, 250);
@@ -709,15 +941,15 @@ function analyzeBassShape(macro: Float64Array, contour: ContourResult | undefine
   );
 
   if (b1 > 0 && b2 > 0 && b3 > 0 && spread < 1.5 && !contourCoversLow)
-    return { text: '低域はシェルフ状に一貫して持ち上がっています。下から中低域までまとめて厚く聞こえやすいです' };
+    return { text: s.bassShelf };
   if (b1 < 0 && b2 < 0 && b3 < 0 && spread < 1.5)
-    return { text: '低域は全体に控えめで、土台が軽く聞こえやすいです' };
+    return { text: s.bassAllBelow };
   if (b1 - b2 >= 1.5 && b1 - b3 >= 2.0 && !contourCoversLow)
-    return { text: '深い低域の沈み込みが目立ちます。重低音だけが下へ伸びるタイプです' };
+    return { text: s.bassSubbass };
   if (b2 > b1 + 1.5 && b2 > b3 + 1.5)
-    return { text: '中低域のパンチが前に出ます。キックの一撃が太く感じやすいです' };
+    return { text: s.bassMidbass };
   if (b3 > b2 + 1.5)
-    return { text: '上側低域の厚みが目立ちます。温かさや膨らみが乗りやすいです' };
+    return { text: s.bassUpperbass };
 
   return undefined;
 }
@@ -748,6 +980,7 @@ function renderNarration(
   bassShape: { text: string } | undefined,
   mode: RenderMode,
   length: OutputLength,
+  s: NarStrings,
 ): { paragraphs: string[]; summaryParagraphs: string[] } {
   const cands: Candidate[] = [];
 
@@ -798,9 +1031,7 @@ function renderNarration(
     const b1k = filtered.find(b => b.band === '1k_2k');
     const b2k = filtered.find(b => b.band === '2k_4k');
     if (b1k && b2k && b1k.sign === b2k.sign && Math.abs(b1k.valueDb - b2k.valueDb) < 0.75) {
-      const intText = b1k.sign > 0
-        ? 'ボーカルの前後感とプレゼンスがまとめて前に出ます'
-        : 'ボーカルの前後感とプレゼンスがまとめて控えめです';
+      const intText = b1k.sign > 0 ? s.integration1k2kPos : s.integration1k2kNeg;
       const ts = `（1–2k: ${b1k.valueDb >= 0 ? '+' : ''}${b1k.valueDb.toFixed(1)}, 2–4k: ${b2k.valueDb >= 0 ? '+' : ''}${b2k.valueDb.toFixed(1)} dB）`;
       cands.push({ domain: 'bodyPresence', priority: 4,
         score: (Math.abs(b1k.valueDb) + Math.abs(b2k.valueDb)) * 5,
@@ -874,10 +1105,10 @@ function renderNarration(
     for (const key of PRAISE_ORDER) {
       if (summaryCount >= 3) break;
       const band = bands.find(b => b.band === key);
-      const def = BAND_DEFS.find(d => d.key === key);
-      if (!band || !def || band.severity !== 'neutral') continue;
+      const bt = s.bandText[key];
+      if (!band || !bt || band.severity !== 'neutral') continue;
       selected.push({ domain: 'praise', priority: 9, score: 0,
-        text: tech(def.praiseText, band.techSuffix) });
+        text: tech(bt.praiseText, band.techSuffix) });
       summaryCount++;
     }
   }
@@ -902,6 +1133,7 @@ export function analyzeFR(
   mode: RenderMode = 'general',
   length: OutputLength = 'full',
 ): FRNarration {
+  const s = getS();
   const frType: FrType = category === 'iem' ? 'in-ear' : 'over-ear';
   const targetCurve = getTargetCurve(category);
 
@@ -920,15 +1152,15 @@ export function analyzeFR(
   const residual = new Float64Array(GRID_SIZE);
   for (let i = 0; i < GRID_SIZE; i++) residual[i] = error[i] - macro[i];
 
-  const summary  = analyzeSummary(macro);
-  const contour  = analyzeContour(macro, frType);
-  const slope    = analyzeSlope(macro);
-  const bands    = analyzeBands(macro);
-  const texture  = analyzeTexture(residual);
-  const { all: allPeaksDips, selected: peaksDips } = analyzePeaksDips(error, texture);
-  const bassShape = analyzeBassShape(macro, contour);
+  const summary  = analyzeSummary(macro, s);
+  const contour  = analyzeContour(macro, frType, s);
+  const slope    = analyzeSlope(macro, s);
+  const bands    = analyzeBands(macro, s);
+  const texture  = analyzeTexture(residual, s);
+  const { all: allPeaksDips, selected: peaksDips } = analyzePeaksDips(error, texture, s);
+  const bassShape = analyzeBassShape(macro, contour, s);
 
-  const { paragraphs, summaryParagraphs } = renderNarration(summary, contour, slope, bands, texture, peaksDips, bassShape, mode, length);
+  const { paragraphs, summaryParagraphs } = renderNarration(summary, contour, slope, bands, texture, peaksDips, bassShape, mode, length, s);
 
   const bandNarrations: BandNarration[] = bands.map(b => ({
     label: b.label,

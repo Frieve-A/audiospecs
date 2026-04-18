@@ -345,6 +345,11 @@ export const ja: Record<string, string> = {
   'product.review': 'レビュー',
   'analysis.ctx.details': '製品詳細ページを開く',
 
+  // FR narration UI
+  'fr.section.summary': 'サマリ',
+  'fr.section.bands': '帯域ごとの傾向',
+  'fr.note': '※ 周波数特性グラフから推定される聞こえ方を表したものです。測定された周波数特性は測定機器固有の特性、あるいは測定に用いられた個体固有のばらつきを含んでいる可能性があります。',
+
   // Embed widget
   'embed.error.not_found': '製品が見つかりません',
   'embed.error.search_link': 'Frieve - AudioSpecs で検索',

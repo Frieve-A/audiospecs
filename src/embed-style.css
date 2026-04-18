@@ -200,6 +200,132 @@ html, body {
   text-decoration: underline;
 }
 
+/* ── FR Narration ── */
+.fr-narration {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--embed-border);
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--embed-text-secondary);
+}
+.fr-narration-section-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--embed-text-tertiary);
+  margin: 0 0 0.4rem;
+}
+.fr-narration-summary {
+  margin-bottom: 0.75rem;
+}
+.fr-narration-para {
+  margin: 0 0 0.35rem;
+}
+.fr-narration-para:last-child {
+  margin-bottom: 0;
+}
+.fr-narration-bands {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+}
+.fr-narration-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  color: var(--embed-text-tertiary);
+  line-height: 1.5;
+}
+.fr-band-row {
+  display: table-row;
+}
+.fr-band-row + .fr-band-row .fr-band-label,
+.fr-band-row + .fr-band-row .fr-band-value,
+.fr-band-row + .fr-band-row .fr-band-text {
+  border-top: 1px solid var(--embed-border);
+}
+.fr-band-label,
+.fr-band-value,
+.fr-band-text {
+  display: table-cell;
+  padding: 0.2rem 0.5rem 0.2rem 0;
+  vertical-align: top;
+}
+.fr-band-label {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--embed-text-tertiary);
+  min-width: 7rem;
+}
+.fr-band-value {
+  font-variant-numeric: tabular-nums;
+  padding: 0.2rem 0.75rem 0.2rem 0;
+  vertical-align: middle;
+}
+.fr-gauge-wrap {
+  display: inline-block;
+  position: relative;
+  width: 120px;
+  height: 16px;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+.fr-gauge-bar {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 1px;
+}
+.fr-gauge-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.fr-gauge-center    { stroke: rgba(0,0,0,0.3); }
+.fr-gauge-tick-long  { stroke: rgba(0,0,0,0.5); }
+.fr-gauge-tick-short { stroke: rgba(0,0,0,0.2); }
+[data-theme="dark"] .fr-gauge-center    { stroke: rgba(255,255,255,0.3); }
+[data-theme="dark"] .fr-gauge-tick-long  { stroke: rgba(255,255,255,0.5); }
+[data-theme="dark"] .fr-gauge-tick-short { stroke: rgba(255,255,255,0.2); }
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] .fr-gauge-center    { stroke: rgba(255,255,255,0.3); }
+  [data-theme="auto"] .fr-gauge-tick-long  { stroke: rgba(255,255,255,0.5); }
+  [data-theme="auto"] .fr-gauge-tick-short { stroke: rgba(255,255,255,0.2); }
+}
+.fr-band-num {
+  display: inline-block;
+  min-width: 4.5rem;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--embed-text-secondary);
+}
+.fr-band-pos.fr-band-sev-slight .fr-band-num { color: #c05050; }
+.fr-band-pos.fr-band-sev-clear  .fr-band-num { color: #a01010; }
+.fr-band-pos.fr-band-sev-severe .fr-band-num { color: #800000; }
+.fr-band-neg.fr-band-sev-slight .fr-band-num { color: #5060c0; }
+.fr-band-neg.fr-band-sev-clear  .fr-band-num { color: #1030a0; }
+.fr-band-neg.fr-band-sev-severe .fr-band-num { color: #002070; }
+[data-theme="dark"] .fr-band-pos.fr-band-sev-slight .fr-band-num,
+[data-theme="dark"] .fr-band-pos.fr-band-sev-clear  .fr-band-num { color: #f08080; }
+[data-theme="dark"] .fr-band-pos.fr-band-sev-severe .fr-band-num { color: #ff9a9a; }
+[data-theme="dark"] .fr-band-neg.fr-band-sev-slight .fr-band-num,
+[data-theme="dark"] .fr-band-neg.fr-band-sev-clear  .fr-band-num { color: #8090e0; }
+[data-theme="dark"] .fr-band-neg.fr-band-sev-severe .fr-band-num { color: #99aaff; }
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] .fr-band-pos.fr-band-sev-slight .fr-band-num,
+  [data-theme="auto"] .fr-band-pos.fr-band-sev-clear  .fr-band-num { color: #f08080; }
+  [data-theme="auto"] .fr-band-pos.fr-band-sev-severe .fr-band-num { color: #ff9a9a; }
+  [data-theme="auto"] .fr-band-neg.fr-band-sev-slight .fr-band-num,
+  [data-theme="auto"] .fr-band-neg.fr-band-sev-clear  .fr-band-num { color: #8090e0; }
+  [data-theme="auto"] .fr-band-neg.fr-band-sev-severe .fr-band-num { color: #99aaff; }
+}
+.fr-band-text {
+  color: var(--embed-text-secondary);
+}
+
 /* ── Spec Table ── */
 .embed-spec-table {
   width: 100%;

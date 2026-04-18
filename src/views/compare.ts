@@ -191,7 +191,7 @@ export async function renderCompare(
         <div class="search-results" id="compare-results" style="display:none"></div>
       </div>
       <div class="control-group" style="display:flex;flex-direction:row;align-items:center;margin-left:auto;gap:0.75rem;flex-wrap:wrap;justify-content:flex-end">
-        <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.85rem;cursor:pointer;flex-shrink:0">
+        <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.85rem;cursor:pointer;flex-shrink:0;text-transform:none;letter-spacing:normal;font-weight:normal;color:var(--text-primary)">
           <input type="checkbox" id="compare-split-measured" ${split ? 'checked' : ''}/>
           ${t('compare.split_spec_measured')}
         </label>

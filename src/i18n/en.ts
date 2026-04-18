@@ -345,6 +345,11 @@ export const en: Record<string, string> = {
   'product.review': 'Review',
   'analysis.ctx.details': 'Open product detail page',
 
+  // FR narration UI
+  'fr.section.summary': 'Summary',
+  'fr.section.bands': 'Response by Frequency Band',
+  'fr.note': 'Describes the expected sound as inferred from the frequency response graph. The measured FR may include characteristics specific to the measurement equipment or unit-to-unit variation.',
+
   // Embed widget
   'embed.error.not_found': 'Product not found',
   'embed.error.search_link': 'Search on Frieve - AudioSpecs',

@@ -547,7 +547,7 @@ export async function renderProduct(
       };
 
       const PEAK_DIP_OFFSET_DB = 1.2;
-      const makePeakDipTraces = (pds: PeakDipResult[], pts: [number, number][]): Data[] => {
+      const makePeakDipTraces = (pds: PeakDipResult[], pts: [number, number][], borderColor: string): Data[] => {
         const fmtHz = (hz: number) => hz < 1000 ? `${hz.toFixed(0)} Hz` : `${(hz / 1000).toFixed(2)} kHz`;
         const peaks = pds.filter(pd => pd.kind === 'peak');
         const dips  = pds.filter(pd => pd.kind === 'dip');
@@ -561,7 +561,7 @@ export async function renderProduct(
           type: 'scatter',
           mode: 'markers',
           name: label,
-          marker: { symbol, color, size: 10, line: { color: '#fff', width: 1 } } as Data['marker'],
+          marker: { symbol, color, size: 10, line: { color: borderColor, width: 1 } } as Data['marker'],
           customdata: items.map(pd =>
             `${label} ${fmtHz(pd.fcHz)}<br>prom=${pd.prominenceDb.toFixed(1)} dB, w=${pd.widthOct.toFixed(2)} oct`
           ),
@@ -580,7 +580,7 @@ export async function renderProduct(
           ? (removeOffset ? offsetDevPoints : devPoints)
           : (removeOffset ? offsetPoints : rawPoints);
         const productTrace = makeFrTrace(pts, '#7c3aed', `${brandLabel} ${productLabel}`);
-        const pdTraces: Data[] = showPeakDip ? makePeakDipTraces(narration.allPeaksDips, pts) : [];
+        const pdTraces: Data[] = showPeakDip ? makePeakDipTraces(narration.allPeaksDips, pts, cc.paper_bgcolor) : [];
         const yTitle = showDeviation ? t('compare.fr.yaxis') : t('compare.fr.yaxis_abs');
         const yRange: [number, number] = showDeviation ? [-12, 12] : [-24, 18];
         const yDtick = showDeviation ? 3 : 6;
@@ -647,32 +647,33 @@ export async function renderProduct(
       const frNarrationEl = container.querySelector<HTMLElement>('#product-fr-narration');
       if (frNarrationEl) {
         try {
-          const addDot = (s: string) => s.endsWith('。') ? s : s.replace(/\.$/, '') + '。';
+          const period = getLocale() === 'ja' ? '。' : '.';
+          const addDot = (s: string) => (s.endsWith('。') || s.endsWith('.')) ? s : s + period;
 
           let html = '';
 
           if (narration.summaryParagraphs.length > 0) {
-            html += `<h4 class="fr-narration-section-label">サマリ</h4>`;
+            html += `<h4 class="fr-narration-section-label">${escHtml(t('fr.section.summary'))}</h4>`;
             html += `<div class="fr-narration-summary">`;
-            html += `<p class="fr-narration-para">${narration.summaryParagraphs.map(p => escHtml(addDot(p))).join('')}</p>`;
+            const sentSep = getLocale() === 'ja' ? '' : ' ';
+            html += `<p class="fr-narration-para">${narration.summaryParagraphs.map(p => escHtml(addDot(p))).join(sentSep)}</p>`;
             html += `</div>`;
           }
 
           if (narration.bandNarrations.length > 0) {
-            html += `<h4 class="fr-narration-section-label">帯域ごとの傾向</h4>`;
+            html += `<h4 class="fr-narration-section-label">${escHtml(t('fr.section.bands'))}</h4>`;
             html += `<div class="fr-narration-bands">`;
 
             // Build static tick SVG once (120×16px, 6px/dB, centre at 60px)
             // Short ticks every 1dB (y 5–11), long ticks every 5dB (y 2–14), centre line
             {
               const GW = 120, GH = 16, CY = 8;
-              let svgLines = `<line x1="0" y1="${CY}" x2="${GW}" y2="${CY}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`;
+              let svgLines = `<line class="fr-gauge-center" x1="0" y1="${CY}" x2="${GW}" y2="${CY}" stroke-width="1"/>`;
               for (let i = 0; i <= 20; i++) {
                 const x = i * 6;
                 const isLong = i % 5 === 0;
                 const y1 = isLong ? 2 : 5, y2 = isLong ? 14 : 11;
-                const col = isLong ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)';
-                svgLines += `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="1"/>`;
+                svgLines += `<line class="${isLong ? 'fr-gauge-tick-long' : 'fr-gauge-tick-short'}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke-width="1"/>`;
               }
               const GAUGE_SVG = `<svg class="fr-gauge-svg" viewBox="0 0 ${GW} ${GH}" xmlns="http://www.w3.org/2000/svg">${svgLines}</svg>`;
 
@@ -698,7 +699,7 @@ export async function renderProduct(
             }
 
             html += `</div>`;
-            html += `<p class="fr-narration-note">※ 周波数特性グラフから推定される聞こえ方を表したものです。測定された周波数特性は測定機器固有の特性、あるいは測定に用いられた個体固有のばらつきを含んでいる可能性があります。</p>`;
+            html += `<p class="fr-narration-note">${escHtml(t('fr.note'))}</p>`;
           }
 
           if (html) frNarrationEl.innerHTML = html;

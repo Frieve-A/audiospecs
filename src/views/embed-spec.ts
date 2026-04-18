@@ -8,12 +8,13 @@
 import Plotly, { type Data, type Layout, type Config } from 'plotly.js-dist-min';
 import { query } from '../db/database';
 import { getCategoryLabel, getAxis, getScaleForField, computeBarPercent, productDisplayName } from '../presets';
-import { t } from '../i18n';
+import { t, getLocale } from '../i18n';
 import { isRowValueMeasured, measuredBadgeSvg, setupMeasuredBadgeTooltips } from '../components/measured-indicator';
 import { setupColHelpTooltips } from '../components/col-help';
 import { showSourceMenu, setupSourceMenuDismiss, fetchSourceUrls } from '../sources';
 import { getExtendedCompactFields, isCompactFieldVisible, formatHzUnit, formatDbSigned } from '../format-utils';
 import { applyFrOffset, buildTargetTrace, computeFrOffset } from '../target-curves';
+import { analyzeFR, type PeakDipResult } from '../components/fr-narration';
 
 /* ── Theme helper for chart colors ── */
 
@@ -276,6 +277,7 @@ export async function renderEmbedSpec(
         <h3 class="embed-fr-title">${esc(t('compare.fr.title'))}</h3>
         <div id="embed-fr-sources" class="embed-fr-sources"></div>
         <div id="embed-fr-plot" style="width:100%;height:280px"></div>
+        <div id="embed-fr-narration" class="fr-narration"></div>
       </div>`;
   }
 
@@ -371,6 +373,46 @@ export async function renderEmbedSpec(
     if (fr) {
       const rawPoints: [number, number][] = JSON.parse(fr.points_json);
       const points = applyFrOffset(rawPoints, computeFrOffset(rawPoints, category));
+
+      const narration = analyzeFR(rawPoints, category);
+
+      const interpFrY = (pts: [number, number][], freq: number): number => {
+        if (freq <= pts[0][0]) return pts[0][1];
+        if (freq >= pts[pts.length - 1][0]) return pts[pts.length - 1][1];
+        let lo = 0, hi = pts.length - 1;
+        while (hi - lo > 1) {
+          const mid = (lo + hi) >> 1;
+          if (pts[mid][0] <= freq) lo = mid; else hi = mid;
+        }
+        const [f0, v0] = pts[lo], [f1, v1] = pts[hi];
+        return v0 + (Math.log(freq / f0) / Math.log(f1 / f0)) * (v1 - v0);
+      };
+
+      const PEAK_DIP_OFFSET_DB = 1.2;
+      const makePeakDipTraces = (pds: PeakDipResult[], pts: [number, number][], borderColor: string): Data[] => {
+        const fmtHz = (hz: number) => hz < 1000 ? `${hz.toFixed(0)} Hz` : `${(hz / 1000).toFixed(2)} kHz`;
+        const peaks = pds.filter(pd => pd.kind === 'peak');
+        const dips  = pds.filter(pd => pd.kind === 'dip');
+        const makeTrace = (
+          items: PeakDipResult[], label: string, symbol: string, color: string, yOffset: number,
+        ): Data => ({
+          x: items.map(pd => pd.fcHz),
+          y: items.map(pd => interpFrY(pts, pd.fcHz) + yOffset),
+          type: 'scatter',
+          mode: 'markers',
+          name: label,
+          marker: { symbol, color, size: 10, line: { color: borderColor, width: 1 } } as Data['marker'],
+          customdata: items.map(pd =>
+            `${label} ${fmtHz(pd.fcHz)}<br>prom=${pd.prominenceDb.toFixed(1)} dB, w=${pd.widthOct.toFixed(2)} oct`
+          ),
+          hovertemplate: '%{customdata}<extra></extra>',
+        });
+        return [
+          makeTrace(peaks, 'Peak', 'triangle-down', '#ef4444', +PEAK_DIP_OFFSET_DB),
+          makeTrace(dips,  'Dip',  'triangle-up',   '#3b82f6', -PEAK_DIP_OFFSET_DB),
+        ];
+      };
+
       const productTrace: Data = {
         x: points.map((p) => p[0]),
         y: points.map((p) => p[1]),
@@ -382,8 +424,8 @@ export async function renderEmbedSpec(
         hovertemplate: '%{fullData.name}: %{customdata}<extra></extra>',
       };
       const targetTrace = buildTargetTrace(category);
-
       const cc = embedChartColors();
+      const pdTraces = makePeakDipTraces(narration.allPeaksDips, points, cc.paper_bgcolor);
       const layout: Partial<Layout> = {
         xaxis: {
           title: { text: t('compare.fr.xaxis'), font: { family: 'sans-serif', size: 12, color: cc.axisTitleColor }, standoff: 8 },
@@ -415,7 +457,7 @@ export async function renderEmbedSpec(
         staticPlot: false,
       };
 
-      await Plotly.react('embed-fr-plot', [productTrace, targetTrace], layout, plotConfig);
+      await Plotly.react('embed-fr-plot', [productTrace, targetTrace, ...pdTraces], layout, plotConfig);
 
       // Rewrite unified hover header to show formatted frequency
       const embedPlotEl = document.getElementById('embed-fr-plot');
@@ -427,6 +469,66 @@ export async function renderEmbedSpec(
             if (hdr?.firstElementChild) hdr.firstElementChild.textContent = formatHzUnit(ev.points[0].x);
           });
         });
+      }
+
+      // FR narration
+      const frNarrationEl = container.querySelector<HTMLElement>('#embed-fr-narration');
+      if (frNarrationEl) {
+        try {
+          const period = getLocale() === 'ja' ? '。' : '.';
+          const addDot = (s: string) => (s.endsWith('。') || s.endsWith('.')) ? s : s + period;
+          let html = '';
+
+          if (narration.summaryParagraphs.length > 0) {
+            html += `<h4 class="fr-narration-section-label">${esc(t('fr.section.summary'))}</h4>`;
+            html += `<div class="fr-narration-summary">`;
+            const sentSep = getLocale() === 'ja' ? '' : ' ';
+            html += `<p class="fr-narration-para">${narration.summaryParagraphs.map(p => esc(addDot(p))).join(sentSep)}</p>`;
+            html += `</div>`;
+          }
+
+          if (narration.bandNarrations.length > 0) {
+            html += `<h4 class="fr-narration-section-label">${esc(t('fr.section.bands'))}</h4>`;
+            html += `<div class="fr-narration-bands">`;
+
+            const GW = 120, GH = 16, CY = 8;
+            let svgLines = `<line class="fr-gauge-center" x1="0" y1="${CY}" x2="${GW}" y2="${CY}" stroke-width="1"/>`;
+            for (let i = 0; i <= 20; i++) {
+              const x = i * 6;
+              const isLong = i % 5 === 0;
+              const y1 = isLong ? 2 : 5, y2 = isLong ? 14 : 11;
+              svgLines += `<line class="${isLong ? 'fr-gauge-tick-long' : 'fr-gauge-tick-short'}" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke-width="1"/>`;
+            }
+            const GAUGE_SVG = `<svg class="fr-gauge-svg" viewBox="0 0 ${GW} ${GH}" xmlns="http://www.w3.org/2000/svg">${svgLines}</svg>`;
+
+            for (const b of narration.bandNarrations) {
+              const v = b.valueDb;
+              const sign = v >= 0 ? '+' : '';
+              const db = `${sign}${v.toFixed(1)} dB`;
+              const signClass = v > 0 ? 'fr-band-pos' : v < 0 ? 'fr-band-neg' : 'fr-band-zero';
+              const vc = Math.max(-10, Math.min(10, v));
+              const barLeft = v >= 0 ? 50 : 50 + vc * 5;
+              const barWidth = Math.abs(vc) * 5;
+              const opacityMap = { neutral: 0, slight: 0.35, clear: 0.55, severe: 0.75 };
+              const barOpacity = opacityMap[b.severity];
+              const rgb = v >= 0 ? '200,50,50' : '50,80,210';
+              const barStyle = `left:${barLeft.toFixed(1)}%;width:${barWidth.toFixed(1)}%;background:rgba(${rgb},${barOpacity})`;
+              const checkmark = b.severity === 'neutral' ? '✅ ' : '';
+              html += `<div class="fr-band-row fr-band-sev-${b.severity} ${signClass}">`;
+              html += `<span class="fr-band-label">${esc(b.label)}</span>`;
+              html += `<span class="fr-band-value"><span class="fr-gauge-wrap"><span class="fr-gauge-bar" style="${barStyle}"></span>${GAUGE_SVG}</span><span class="fr-band-num">${esc(db)}</span></span>`;
+              html += `<span class="fr-band-text">${checkmark}${esc(addDot(b.text))}</span>`;
+              html += `</div>`;
+            }
+
+            html += `</div>`;
+            html += `<p class="fr-narration-note">${esc(t('fr.note'))}</p>`;
+          }
+
+          if (html) frNarrationEl.innerHTML = html;
+        } catch {
+          // narration is best-effort — silently ignore errors
+        }
       }
     }
 
