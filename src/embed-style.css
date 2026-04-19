@@ -277,6 +277,22 @@ html, body {
   bottom: 4px;
   border-radius: 1px;
 }
+.fr-bar-pos { --fr-rgb: 200,50,50; }
+.fr-bar-neg { --fr-rgb: 50,80,210; }
+[data-theme="dark"] .fr-bar-pos { --fr-rgb: 235,95,95; }
+[data-theme="dark"] .fr-bar-neg { --fr-rgb: 95,135,250; }
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] .fr-bar-pos { --fr-rgb: 235,95,95; }
+  [data-theme="auto"] .fr-bar-neg { --fr-rgb: 95,135,250; }
+}
+.fr-bar-sev-neutral { background: rgba(114,114,114,0.39); }
+.fr-bar-sev-slight  { background: rgba(var(--fr-rgb),0.50); }
+.fr-bar-sev-clear   { background: rgba(var(--fr-rgb),0.68); }
+.fr-bar-sev-severe  { background: rgba(var(--fr-rgb),0.85); }
+[data-theme="dark"] .fr-bar-sev-neutral { background: rgba(185,185,185,0.44); }
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] .fr-bar-sev-neutral { background: rgba(185,185,185,0.44); }
+}
 .fr-gauge-svg {
   position: absolute;
   inset: 0;

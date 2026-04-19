@@ -685,14 +685,12 @@ export async function renderProduct(
                 const vc = Math.max(-10, Math.min(10, v));
                 const barLeft = v >= 0 ? 50 : 50 + vc * 5;
                 const barWidth = Math.abs(vc) * 5;
-                const opacityMap = { neutral: 0, slight: 0.35, clear: 0.55, severe: 0.75 };
-                const barOpacity = opacityMap[b.severity];
-                const rgb = v >= 0 ? '200,50,50' : '50,80,210';
-                const barStyle = `left:${barLeft.toFixed(1)}%;width:${barWidth.toFixed(1)}%;background:rgba(${rgb},${barOpacity})`;
+                const dirClass = v >= 0 ? 'fr-bar-pos' : 'fr-bar-neg';
+                const barStyle = `left:${barLeft.toFixed(1)}%;width:${barWidth.toFixed(1)}%`;
                 const checkmark = b.severity === 'neutral' ? '✅ ' : '';
                 html += `<div class="fr-band-row fr-band-sev-${b.severity} ${signClass}">`;
                 html += `<span class="fr-band-label">${escHtml(b.label)}</span>`;
-                html += `<span class="fr-band-value"><span class="fr-gauge-wrap"><span class="fr-gauge-bar" style="${barStyle}"></span>${GAUGE_SVG}</span><span class="fr-band-num">${escHtml(db)}</span></span>`;
+                html += `<span class="fr-band-value"><span class="fr-gauge-wrap"><span class="fr-gauge-bar ${dirClass} fr-bar-sev-${b.severity}" style="${barStyle}"></span>${GAUGE_SVG}</span><span class="fr-band-num">${escHtml(db)}</span></span>`;
                 html += `<span class="fr-band-text">${checkmark}${escHtml(addDot(b.text))}</span>`;
                 html += `</div>`;
               }
