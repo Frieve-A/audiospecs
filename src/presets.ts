@@ -113,7 +113,7 @@ export const AXES: AxisDef[] = [
   { id: 'battery_life_hours', source: 'battery_life_hours', label: 'Battery Life (h)', scale: 'log', better: 'higher' },
   { id: 'battery_life_hours_anc_on', source: 'battery_life_hours_anc_on', label: 'Battery (ANC) (h)', scale: 'log', better: 'higher' },
   { id: 'battery_total_life_hours', source: 'battery_total_life_hours', label: 'Total Battery (h)', scale: 'log', better: 'higher' },
-  { id: 'battery_capacity_mah', source: 'battery_capacity_mah', label: 'Battery Capacity (mAh)', scale: 'log' },
+  { id: 'battery_capacity_mah', source: 'battery_capacity_mah', label: 'Battery Capacity (mAh)', scale: 'log', better: 'higher' },
   { id: 'battery_charge_time_hours', source: 'battery_charge_time_hours', label: 'Charge Time (h)', scale: 'log', better: 'lower' },
   { id: 'width_mm', source: 'width_mm', label: 'Width (mm)', scale: 'log' },
   { id: 'height_mm', source: 'height_mm', label: 'Height (mm)', scale: 'log' },
