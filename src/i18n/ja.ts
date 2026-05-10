@@ -47,6 +47,8 @@ export const ja: Record<string, string> = {
   'cat.mic': 'マイク',
   'cat.usb_interface': 'USBインターフェース',
   'cat.sub_woofer': 'サブウーファー',
+  'cat.accessory': 'アクセサリ',
+  'cat.cable': 'ケーブル',
 
   // Home
   'home.title': 'Frieve - AudioSpecs',

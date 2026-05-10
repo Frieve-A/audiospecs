@@ -47,6 +47,8 @@ export const en: Record<string, string> = {
   'cat.mic': 'Microphone',
   'cat.usb_interface': 'USB Interface',
   'cat.sub_woofer': 'Subwoofer',
+  'cat.accessory': 'Accessory',
+  'cat.cable': 'Cable',
 
   // Home
   'home.title': 'Frieve - AudioSpecs',
