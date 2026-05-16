@@ -27,6 +27,26 @@ const sig3 = _sig3;
 const formatHz = _formatHz;
 const escHtml = _escHtml;
 
+const AMAZON_IMAGE_WORKER_BASE = 'https://audiospecs-amazon-image.frievea.workers.dev';
+const AMAZON_TRACKING_TAGS = {
+  jp: 'frieve02-22',
+  us: 'frieve-20',
+} as const;
+
+type AmazonMarketplaceKey = keyof typeof AMAZON_TRACKING_TAGS;
+
+interface AmazonImageLookupResult {
+  asin: string;
+  marketplace: string;
+  selected?: AmazonMarketplaceKey;
+  fallback?: boolean;
+  image?: {
+    url?: string;
+    width?: number;
+    height?: number;
+  };
+}
+
 /* ── Field definitions (same as compare / embed-spec) ── */
 
 interface SpecField {
@@ -207,6 +227,96 @@ export function productPageUrlFromRow(row: { brand_name_en?: string; brand_label
   return productPageUrl(brand, row.product_name);
 }
 
+function normalizeAsin(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const asin = value.trim().toUpperCase();
+  return /^[A-Z0-9]{10}$/.test(asin) ? asin : '';
+}
+
+function amazonPriorityForLocale(): AmazonMarketplaceKey {
+  return getLocale() === 'ja' ? 'jp' : 'us';
+}
+
+function buildAmazonImageLookupUrl(asinJp: string, asinUs: string, priority: AmazonMarketplaceKey): string {
+  const params = new URLSearchParams({ priority, format: 'json' });
+  if (asinJp) params.set('asin_jp', asinJp);
+  if (asinUs) params.set('asin_us', asinUs);
+  return `${AMAZON_IMAGE_WORKER_BASE}/amazon-image?${params.toString()}`;
+}
+
+function selectedMarketplaceFromLookup(result: AmazonImageLookupResult): AmazonMarketplaceKey {
+  if (result.selected === 'jp' || result.selected === 'us') return result.selected;
+  return result.marketplace.includes('amazon.com') && !result.marketplace.includes('co.jp') ? 'us' : 'jp';
+}
+
+function amazonProductUrl(marketplace: AmazonMarketplaceKey, asin: string): string {
+  const host = marketplace === 'jp' ? 'www.amazon.co.jp' : 'www.amazon.com';
+  const tag = AMAZON_TRACKING_TAGS[marketplace];
+  return `https://${host}/dp/${encodeURIComponent(asin)}?tag=${encodeURIComponent(tag)}`;
+}
+
+function buildAmazonSummaryHtml(asinJp: string, asinUs: string): string {
+  if (!asinJp && !asinUs) return '';
+
+  return `
+    <div class="product-amazon-summary">
+      <a id="product-amazon-image-link" class="product-amazon-image-link is-loading" target="_blank" rel="sponsored noopener noreferrer" aria-label="${escHtml(t('product.amazon_image_label'))}">
+        <span class="product-amazon-image-placeholder">${escHtml(t('product.amazon_image_loading'))}</span>
+      </a>
+    </div>`;
+}
+
+async function hydrateAmazonProductImage(
+  container: HTMLElement,
+  asinJp: string,
+  asinUs: string,
+  brandLabel: string,
+  productLabel: string,
+): Promise<void> {
+  const link = container.querySelector<HTMLAnchorElement>('#product-amazon-image-link');
+  if (!link || (!asinJp && !asinUs)) return;
+
+  try {
+    const priority = amazonPriorityForLocale();
+    const response = await fetch(buildAmazonImageLookupUrl(asinJp, asinUs, priority), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error(`Amazon image lookup failed: ${response.status}`);
+
+    const result = await response.json() as AmazonImageLookupResult;
+    const imageUrl = result.image?.url;
+    if (!result.asin || !imageUrl) throw new Error('Amazon image lookup returned no image URL.');
+
+    const selected = selectedMarketplaceFromLookup(result);
+    const img = document.createElement('img');
+    img.src = imageUrl;
+    img.alt = `${brandLabel} ${productLabel}`;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    if (result.image?.width) img.width = result.image.width;
+    if (result.image?.height) img.height = result.image.height;
+
+    const marketplaceLabel = selected === 'jp' ? 'amazon.co.jp' : 'amazon.com';
+    const productName = `${brandLabel} ${productLabel}`;
+    const linkHint = t('product.amazon_image_open_pr', {
+      marketplace: marketplaceLabel,
+      product: productName,
+    });
+
+    link.href = amazonProductUrl(selected, result.asin);
+    link.title = linkHint;
+    link.setAttribute('aria-label', linkHint);
+    link.classList.remove('is-loading', 'is-unavailable');
+    link.textContent = '';
+    link.appendChild(img);
+  } catch {
+    link.classList.remove('is-loading');
+    link.classList.add('is-unavailable');
+    link.removeAttribute('href');
+    link.textContent = t('product.amazon_image_unavailable');
+  }
+}
+
 /* ── Main render ── */
 
 export async function renderProduct(
@@ -257,6 +367,8 @@ export async function renderProduct(
   const category = row.category_primary;
   const categoryLabel = getCategoryLabel(category);
   const pid = row.product_id;
+  const asinJp = normalizeAsin(row.asin_jp);
+  const asinUs = normalizeAsin(row.asin_us);
 
   // Update page title
   document.title = `${brandLabel} ${productLabel} — Frieve - AudioSpecs`;
@@ -393,6 +505,7 @@ export async function renderProduct(
   container.innerHTML = `
     <div class="view-header product-header">
       <h1>${escHtml(brandLabel)} <span class="product-header-name">${escHtml(productLabel)}</span> <span class="chip cat-${escHtml(category)}">${escHtml(categoryLabel)}</span></h1>
+      ${buildAmazonSummaryHtml(asinJp, asinUs)}
     </div>
     <div class="product-actions">
       <button id="product-add-compare">+ ${escHtml(t('product.add_to_compare'))}</button>
@@ -445,6 +558,7 @@ export async function renderProduct(
   };
   document.getElementById('product-add-compare')!.addEventListener('click', addToCompare);
   document.getElementById('product-add-compare-bottom')!.addEventListener('click', addToCompare);
+  void hydrateAmazonProductImage(container, asinJp, asinUs, brandLabel, productLabel);
 
   // ── Review widget postMessage height adjustment ──
   if (reviewRef) {
