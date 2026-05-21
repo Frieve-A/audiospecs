@@ -259,10 +259,8 @@ function buildAmazonSummaryHtml(asinJp: string, asinUs: string): string {
   if (!asinJp && !asinUs) return '';
 
   return `
-    <div class="product-amazon-summary">
-      <a id="product-amazon-image-link" class="product-amazon-image-link is-loading" target="_blank" rel="sponsored noopener noreferrer" aria-label="${escHtml(t('product.amazon_image_label'))}">
-        <span class="product-amazon-image-placeholder">${escHtml(t('product.amazon_image_loading'))}</span>
-      </a>
+    <div class="product-amazon-summary is-loading">
+      <a id="product-amazon-image-link" class="product-amazon-image-link is-loading" target="_blank" rel="sponsored noopener noreferrer" aria-label="${escHtml(t('product.amazon_image_label'))}"></a>
     </div>`;
 }
 
@@ -309,11 +307,12 @@ async function hydrateAmazonProductImage(
     link.classList.remove('is-loading', 'is-unavailable');
     link.textContent = '';
     link.appendChild(img);
+    const summary = link.closest<HTMLElement>('.product-amazon-summary');
+    summary?.classList.remove('is-loading');
   } catch {
-    link.classList.remove('is-loading');
-    link.classList.add('is-unavailable');
-    link.removeAttribute('href');
-    link.textContent = t('product.amazon_image_unavailable');
+    const summary = link.closest<HTMLElement>('.product-amazon-summary');
+    if (summary) summary.remove();
+    else link.remove();
   }
 }
 

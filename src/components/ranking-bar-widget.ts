@@ -615,6 +615,9 @@ export function createRankingSection(
   const eligibleAxes = axes.filter((axis) => {
     const data = buildRankingData(allProducts, axis.id);
     if (data.length < AXIS_MIN_POINTS) return false;
+    // Skip axes where all products share the same value (no meaningful ranking)
+    const firstVal = data[0].value;
+    if (data.every((d) => d.value === firstVal)) return false;
     // Check highlight condition
     const highlightedWithValue = data.filter((d) => highlights.has(d.product_id));
     return highlightedWithValue.length >= (highlights.size === 1 ? 1 : 2);
