@@ -3,6 +3,35 @@ import { getCategoryLabel } from '../presets';
 import { navigate } from '../router';
 import { t } from '../i18n';
 
+// Columns that count as "performance data" for coverage reporting.
+// The DB's `has_perf_data` flag is unreliable — it is 0 for entire categories
+// that clearly have performance values (e.g. every sub_woofer/accessory, and
+// all but one mic), so coverage is derived from the actual performance columns
+// instead. This set is the multi-source performance group defined in
+// dev/web_public_db_mapping.md (electronics 性能 + transducer 仕様 + amp 出力)
+// plus the derived sensitivity_proxy_db.
+const PERF_COLUMNS = [
+  'sinad_db',
+  'snr_db',
+  'thd_percent',
+  'dynamic_range_db',
+  'crosstalk_db',
+  'impedance_ohm',
+  'sensitivity_db_per_mw',
+  'sensitivity_db_per_v',
+  'sensitivity_proxy_db',
+  'freq_low_hz',
+  'freq_high_hz',
+  'amp_power_mw_32ohm',
+  'amp_power_w',
+  'amp_voltage_vrms',
+  'amp_voltage_vrms_balanced',
+  'amp_output_impedance_ohm',
+  'line_output_impedance_ohm',
+];
+// SQL predicate: true when a row has at least one performance metric.
+const HAS_PERF_SQL = `(${PERF_COLUMNS.map((c) => `${c} IS NOT NULL`).join(' OR ')})`;
+
 export async function renderAbout(container: HTMLElement): Promise<void> {
   container.innerHTML = `
     <div class="view-header">
@@ -33,7 +62,7 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
       p.category_primary,
       COUNT(*) as total,
       SUM(CASE WHEN coalesce(p.street_price_usd, p.msrp_usd) IS NOT NULL THEN 1 ELSE 0 END) as has_price,
-      SUM(CASE WHEN p.has_perf_data = 1 THEN 1 ELSE 0 END) as has_perf
+      SUM(CASE WHEN ${HAS_PERF_SQL} THEN 1 ELSE 0 END) as has_perf
     FROM web_product_core p
     GROUP BY p.category_primary
     ORDER BY total DESC
@@ -47,7 +76,7 @@ export async function renderAbout(container: HTMLElement): Promise<void> {
     "SELECT COUNT(*) as cnt FROM web_product_core WHERE coalesce(street_price_usd, msrp_usd) IS NOT NULL",
   );
   const withPerf = await query<{ cnt: number }>(
-    "SELECT COUNT(*) as cnt FROM web_product_core WHERE has_perf_data = 1",
+    `SELECT COUNT(*) as cnt FROM web_product_core WHERE ${HAS_PERF_SQL}`,
   );
   const brandCount = await query<{ cnt: number }>(
     'SELECT COUNT(*) as cnt FROM web_brand_summary',

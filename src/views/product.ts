@@ -434,12 +434,13 @@ export async function renderProduct(
     const widgetLang = getLocale() === 'ja' ? 'ja' : 'en';
     const widgetSrc = `${widgetBase}/product_widget.html?ref=${encodeURIComponent(reviewRef)}&lang=${widgetLang}&theme=${widgetTheme}`;
     reviewHtml = `
-      <div class="card" style="margin-bottom:1rem" id="product-review-card">
+      <div class="card" style="margin-bottom:1rem" id="product-review-card" hidden>
         <div class="card-body">
           <h3 style="margin:0 0 0.5rem">${escHtml(t('product.review'))}</h3>
           <iframe id="ar-widget-${escHtml(reviewRef)}"
                   src="${escHtml(widgetSrc)}"
                   style="width:100%;border:none;overflow:hidden;"
+                  title="${escHtml(t('product.review'))}"
                   scrolling="no">
           </iframe>
         </div>
@@ -561,18 +562,38 @@ export async function renderProduct(
 
   // ── Review widget postMessage height adjustment ──
   if (reviewRef) {
+    const iframe = container.querySelector<HTMLIFrameElement>(`#ar-widget-${CSS.escape(reviewRef)}`);
+    const card = container.querySelector<HTMLElement>('#product-review-card');
+    const hideReviewCard = () => {
+      if (card) card.hidden = true;
+    };
+    const showReviewCard = (height: number) => {
+      if (!card || !iframe) return;
+      iframe.style.height = `${height}px`;
+      card.hidden = false;
+    };
+
+    iframe?.addEventListener('error', hideReviewCard);
+
     const handleWidgetMessage = (e: MessageEvent) => {
-      if (e.data && e.data.type === 'frieve-audioreview-widget-resize' && e.data.ref) {
-        const iframe = container.querySelector<HTMLIFrameElement>(`#ar-widget-${CSS.escape(e.data.ref)}`);
-        const card = container.querySelector<HTMLElement>('#product-review-card');
-        if (iframe) {
-          if (e.data.height === 0) {
-            if (card) card.style.display = 'none';
-          } else {
-            if (card) card.style.display = '';
-            iframe.style.height = e.data.height + 'px';
-          }
+      if (!iframe || e.source !== iframe.contentWindow) return;
+      if (!e.data || typeof e.data !== 'object') return;
+
+      const data = e.data as { type?: unknown; ref?: unknown; height?: unknown };
+      if (data.ref !== reviewRef) return;
+
+      if (data.type === 'frieve-audioreview-widget-error') {
+        hideReviewCard();
+        return;
+      }
+
+      if (data.type === 'frieve-audioreview-widget-resize') {
+        const height = Number(data.height);
+        if (!Number.isFinite(height) || height <= 0) {
+          hideReviewCard();
+          return;
         }
+        showReviewCard(height);
       }
     };
     window.addEventListener('message', handleWidgetMessage);
