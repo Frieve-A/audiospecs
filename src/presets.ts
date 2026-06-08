@@ -284,32 +284,45 @@ export function isVariantAxisId(id: string): boolean {
   return /_(measured|spec)$/.test(id);
 }
 
-/** Axes whose 0 values should be clamped to a floor for log-scale display */
-const LOG_CLAMP_AXES: Record<string, number> = {
-  amp_output_impedance_ohm: 0.01,
-  amp_output_impedance_ohm_measured: 0.01,
-  amp_output_impedance_ohm_spec: 0.01,
-  line_output_impedance_ohm: 0.01,
-  line_output_impedance_ohm_measured: 0.01,
-  line_output_impedance_ohm_spec: 0.01,
+/**
+ * Axes whose extreme-low values should be clamped to a floor for log-scale display.
+ * `mode: 'zero'` clamps only non-positive values (≤0); `mode: 'floor'` clamps any
+ * value at or below the floor (e.g. sub-0.1Hz lower frequency limits).
+ */
+const LOG_CLAMP_AXES: Record<string, { floor: number; mode: 'zero' | 'floor' }> = {
+  amp_output_impedance_ohm: { floor: 0.01, mode: 'zero' },
+  amp_output_impedance_ohm_measured: { floor: 0.01, mode: 'zero' },
+  amp_output_impedance_ohm_spec: { floor: 0.01, mode: 'zero' },
+  line_output_impedance_ohm: { floor: 0.01, mode: 'zero' },
+  line_output_impedance_ohm_measured: { floor: 0.01, mode: 'zero' },
+  line_output_impedance_ohm_spec: { floor: 0.01, mode: 'zero' },
+  freq_low_hz: { floor: 0.1, mode: 'floor' },
+  freq_low_hz_measured: { floor: 0.1, mode: 'floor' },
+  freq_low_hz_spec: { floor: 0.1, mode: 'floor' },
 };
 
+function clampValue(v: number, clamp: { floor: number; mode: 'zero' | 'floor' } | undefined): number {
+  if (!clamp) return v;
+  const shouldClamp = clamp.mode === 'floor' ? v <= clamp.floor : v <= 0;
+  return shouldClamp ? clamp.floor : v;
+}
+
 /**
- * Clamp 0 values to a display floor for specific log-scale axes.
+ * Clamp extreme-low values to a display floor for specific log-scale axes.
  * Plot coordinates use clamped x_val / y_val; original values are preserved
  * in x_val_raw / y_val_raw for hover display.
  */
 export function clampForScatter<T extends { x_val: number; y_val: number }>(
   rows: T[], xAxisId: string, yAxisId: string,
 ): (T & { x_val_raw: number; y_val_raw: number })[] {
-  const xFloor = LOG_CLAMP_AXES[xAxisId];
-  const yFloor = LOG_CLAMP_AXES[yAxisId];
+  const xClamp = LOG_CLAMP_AXES[xAxisId];
+  const yClamp = LOG_CLAMP_AXES[yAxisId];
   return rows.map((r) => ({
     ...r,
     x_val_raw: r.x_val,
     y_val_raw: r.y_val,
-    x_val: xFloor != null && r.x_val <= 0 ? xFloor : r.x_val,
-    y_val: yFloor != null && r.y_val <= 0 ? yFloor : r.y_val,
+    x_val: clampValue(r.x_val, xClamp),
+    y_val: clampValue(r.y_val, yClamp),
   }));
 }
 
